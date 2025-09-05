@@ -1,0 +1,161 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+*.pdb
+
+# Cargo
+Cargo.lock
+# Keep Cargo.lock for binary crates
+# Remove the line above if this is a binary crate
+
+# IDE and Editor files
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Test coverage
+*.profraw
+*.profdata
+/coverage/
+/target/llvm-cov/
+/target/coverage/
+tarpaulin-report.html
+cobertura.xml
+
+# Benchmark results
+/target/criterion/
+
+# Documentation
+/target/doc/
+
+# Security audit reports
+unsafe-report.md
+supply-chain-report.txt
+
+# Debug artifacts
+*.dSYM/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Backup files
+*.backup
+*.bak
+*.old
+
+# Temporary files
+*.tmp
+/tmp/
+
+# OS specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Desktop.ini
+
+# Python (for any helper scripts)
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.Python
+
+# Node.js (if using any JS tooling)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Logs
+*.log
+logs/
+
+# Test artifacts
+/test-results/
+/test-reports/
+
+# Build artifacts from examples
+/examples/output/
+
+# Encrypted test files
+*.enc
+*.encrypted
+
+# Keys (for security - never commit real keys)
+*.private
+*.secret
+keys/
+# Keep example keys
+!examples/test_keys/
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Flamegraph
+flamegraph.svg
+perf.data
+perf.data.old
+
+# Memory profiling
+massif.out.*
+cachegrind.out.*
+callgrind.out.*
+
+# Release artifacts
+/dist/
+/release/
+*.tar.gz
+*.zip
+
+# macOS
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.TemporaryItems
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*

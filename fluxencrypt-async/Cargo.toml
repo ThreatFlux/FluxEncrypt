@@ -1,0 +1,41 @@
+[package]
+name = "fluxencrypt-async"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
+description = "Async/await support for FluxEncrypt encryption SDK"
+
+[dependencies]
+# Core FluxEncrypt library
+fluxencrypt = { version = "0.1.0", path = "../fluxencrypt", features = ["serde"] }
+
+# Async runtime
+tokio = { workspace = true }
+futures = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Logging
+log = { workspace = true }
+
+# Utilities
+pin-project-lite = "0.2"
+
+[dev-dependencies]
+tokio-test = "0.4"
+tempfile = { workspace = true }
+
+[features]
+default = ["tokio-rt"]
+tokio-rt = ["tokio/rt-multi-thread"]
+tokio-fs = ["tokio/fs"]
+tokio-io = ["tokio/io-std", "tokio/io-util"]

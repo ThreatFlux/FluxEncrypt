@@ -1,0 +1,66 @@
+[workspace]
+resolver = "2"
+members = [
+    "fluxencrypt",
+    "fluxencrypt-cli",
+    "fluxencrypt-async"
+]
+
+[workspace.package]
+version = "0.1.0"
+authors = ["Wyatt Roersma", "Claude Code", "Codex"]
+license = "MIT"
+edition = "2021"
+repository = "https://github.com/ThreatFlux/fluxencrypt"
+homepage = "https://github.com/ThreatFlux/fluxencrypt"
+documentation = "https://docs.rs/fluxencrypt"
+keywords = ["encryption", "cryptography", "security", "aes", "rsa"]
+categories = ["cryptography", "command-line-utilities"]
+rust-version = "1.70"
+
+[workspace.dependencies]
+# Core cryptography
+ring = "0.17"
+zeroize = { version = "1.8", features = ["derive"] }
+
+# Encoding and serialization
+base64 = "0.22"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Performance and concurrency
+rayon = "1.10"
+tokio = { version = "1.42", features = ["full"] }
+futures = "0.3"
+
+# CLI utilities
+clap = { version = "4.5", features = ["derive", "cargo"] }
+indicatif = "0.17"
+colored = "2.1"
+dialoguer = "0.11"
+
+# Logging
+env_logger = "0.11"
+log = "0.4"
+
+# Testing
+criterion = { version = "0.5", features = ["html_reports"] }
+proptest = "1.0"
+hex = "0.4"
+
+# Development utilities
+tempfile = "3.0"
+rand = "0.8"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.bench]
+debug = true

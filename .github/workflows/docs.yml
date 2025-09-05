@@ -1,0 +1,109 @@
+name: Documentation
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  docs:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Build documentation
+      run: |
+        cargo doc --all-features --no-deps --workspace
+        echo '<meta http-equiv="refresh" content="0; url=fluxencrypt">' > target/doc/index.html
+
+    - name: Check for broken internal links
+      run: cargo doc --all-features --no-deps --workspace 2>&1 | grep -E "warning.*intra-doc link" && exit 1 || exit 0
+
+    - name: Deploy to GitHub Pages
+      if: github.ref == 'refs/heads/main'
+      uses: peaceiris/actions-gh-pages@v4
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./target/doc
+        force_orphan: true
+
+  mdbook:
+    name: Build MDBook
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup mdBook
+      uses: peaceiris/actions-mdbook@v2
+      with:
+        mdbook-version: 'latest'
+
+    - name: Build book (if docs/ exists)
+      run: |
+        if [ -d "docs" ] && [ -f "docs/book.toml" ]; then
+          cd docs
+          mdbook build
+          cd ..
+        else
+          echo "No mdbook documentation found, skipping..."
+        fi
+
+    - name: Deploy book to GitHub Pages
+      if: github.ref == 'refs/heads/main'
+      uses: peaceiris/actions-gh-pages@v4
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./docs/book
+        destination_dir: book
+        force_orphan: false
+
+  check_examples:
+    name: Check Examples
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Check examples compile
+      run: |
+        for example in fluxencrypt/examples/*.rs; do
+          if [ -f "$example" ]; then
+            echo "Checking example: $example"
+            cargo check --example "$(basename "$example" .rs)" --manifest-path fluxencrypt/Cargo.toml
+          fi
+        done
+
+    - name: Run examples
+      run: |
+        for example in fluxencrypt/examples/*.rs; do
+          if [ -f "$example" ]; then
+            echo "Running example: $example"
+            timeout 30s cargo run --example "$(basename "$example" .rs)" --manifest-path fluxencrypt/Cargo.toml || true
+          fi
+        done

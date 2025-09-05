@@ -1,0 +1,70 @@
+[package]
+name = "fluxencrypt"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
+description = "A high-performance, secure encryption SDK for Rust applications"
+readme = "../README.md"
+
+[dependencies]
+# Core cryptography
+ring = { workspace = true }
+zeroize = { workspace = true }
+
+# Encoding and serialization
+base64 = { workspace = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Performance and concurrency
+rayon = { workspace = true, optional = true }
+
+# Logging
+log = { workspace = true }
+
+# Utilities
+rand = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+proptest = { workspace = true }
+hex = { workspace = true }
+tempfile = { workspace = true }
+env_logger = { workspace = true }
+
+[features]
+default = ["serde", "parallel"]
+serde = ["dep:serde", "dep:serde_json"]
+parallel = ["dep:rayon"]
+std = []
+
+[[example]]
+name = "basic_encryption"
+required-features = ["serde"]
+
+[[example]]
+name = "file_encryption"
+required-features = ["serde"]
+
+[[example]]
+name = "key_management"
+required-features = ["serde"]
+
+[[example]]
+name = "environment_config"
+required-features = ["serde"]
+
+[[bench]]
+name = "encryption_benchmarks"
+harness = false

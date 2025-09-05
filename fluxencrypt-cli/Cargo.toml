@@ -1,0 +1,61 @@
+[package]
+name = "fluxencrypt-cli"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+keywords.workspace = true
+categories.workspace = true
+rust-version.workspace = true
+description = "Command line interface for FluxEncrypt encryption SDK"
+
+[[bin]]
+name = "fluxencrypt"
+path = "src/main.rs"
+
+[dependencies]
+# Core FluxEncrypt library
+fluxencrypt = { version = "0.1.0", path = "../fluxencrypt", features = ["serde"] }
+
+# Command line interface
+clap = { workspace = true }
+dialoguer = { workspace = true }
+
+# Progress and UI
+indicatif = { workspace = true }
+colored = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Logging
+env_logger = { workspace = true }
+log = { workspace = true }
+
+# Serialization and encoding
+serde = { workspace = true }
+serde_json = { workspace = true }
+base64 = { workspace = true }
+
+# File and path utilities
+walkdir = "2.3"
+glob = "0.3"
+
+# System utilities
+dirs = "5.0"
+
+# Performance
+rayon = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+assert_cmd = "2.0"
+predicates = "3.0"
+
+[features]
+default = ["parallel"]
+parallel = ["dep:rayon", "fluxencrypt/parallel"]
