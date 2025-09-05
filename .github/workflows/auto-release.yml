@@ -375,7 +375,8 @@ jobs:
           7z a ${{ matrix.asset_name }}.zip ${{ matrix.artifact_name }}
           echo "ASSET_PATH=target/${{ matrix.target }}/release/${{ matrix.asset_name }}.zip" >> $env:GITHUB_ENV
 
-      - name: Upload Release Asset
+      - name: Upload Release Asset (Unix)
+        if: matrix.os != 'windows-latest'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -386,6 +387,25 @@ jobs:
           # Upload the asset
           gh release upload "v${{ needs.version_and_release.outputs.version }}" \
             "${{ env.ASSET_PATH }}" --clobber
+
+      - name: Upload Release Asset (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get the asset filename
+          $assetName = Split-Path -Leaf $env:ASSET_PATH
+          
+          # Try to delete existing asset (ignore errors)
+          try {
+            gh release delete-asset "v${{ needs.version_and_release.outputs.version }}" $assetName --yes 2>$null
+          } catch {
+            Write-Host "No existing asset to delete"
+          }
+          
+          # Upload the asset
+          gh release upload "v${{ needs.version_and_release.outputs.version }}" $env:ASSET_PATH --clobber
 
       - name: Generate SBOM (Unix)
         if: matrix.os != 'windows-latest'
