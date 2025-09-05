@@ -85,8 +85,8 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install cargo-bump
-        run: cargo install cargo-bump
+      - name: Install cargo-workspaces
+        run: cargo install cargo-workspaces
 
       - name: Configure git
         run: |
@@ -110,27 +110,74 @@ jobs:
             fi
           fi
 
+      - name: Get current version
+        id: current_version
+        run: |
+          CURRENT_VERSION=$(grep "^version" Cargo.toml | head -1 | cut -d'"' -f2)
+          echo "current=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+
       - name: Bump version
         id: version
         run: |
           BUMP_TYPE="${{ steps.version_type.outputs.bump_type }}"
-          PRERELEASE_ID="${{ steps.version_type.outputs.prerelease_id }}"
+          CURRENT="${{ steps.current_version.outputs.current }}"
           
-          if [[ "$BUMP_TYPE" == *"pre"* ]]; then
-            if [ -n "$PRERELEASE_ID" ]; then
-              NEW_VERSION=$(cargo bump --dry-run $BUMP_TYPE --pre-id $PRERELEASE_ID | grep "new version" | cut -d' ' -f4)
-              cargo bump $BUMP_TYPE --pre-id $PRERELEASE_ID
-            else
-              NEW_VERSION=$(cargo bump --dry-run $BUMP_TYPE | grep "new version" | cut -d' ' -f4)
-              cargo bump $BUMP_TYPE
-            fi
+          # Parse current version
+          IFS='.' read -r MAJOR MINOR PATCH <<< "${CURRENT%-*}"
+          
+          # Handle prerelease versions
+          if [[ "$CURRENT" == *"-"* ]]; then
+            PRERELEASE="${CURRENT#*-}"
+            PRERELEASE="${PRERELEASE%+*}"
           else
-            NEW_VERSION=$(cargo bump --dry-run $BUMP_TYPE | grep "new version" | cut -d' ' -f4)
-            cargo bump $BUMP_TYPE
+            PRERELEASE=""
           fi
           
-          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          # Bump version based on type
+          case "$BUMP_TYPE" in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+            premajor)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              PRERELEASE="${{ steps.version_type.outputs.prerelease_id }}.1"
+              ;;
+            preminor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              PRERELEASE="${{ steps.version_type.outputs.prerelease_id }}.1"
+              ;;
+            prepatch)
+              PATCH=$((PATCH + 1))
+              PRERELEASE="${{ steps.version_type.outputs.prerelease_id }}.1"
+              ;;
+          esac
+          
+          # Construct new version
+          if [ -n "$PRERELEASE" ] && [[ "$BUMP_TYPE" == *"pre"* ]]; then
+            NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}-${PRERELEASE}"
+          else
+            NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          fi
+          
           echo "New version: $NEW_VERSION"
+          
+          # Update workspace version using cargo-workspaces
+          cargo workspaces version custom $NEW_VERSION --no-git-commit --yes
+          
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
       - name: Generate changelog
         id: changelog
@@ -309,32 +356,19 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Publish fluxencrypt (core)
+      - name: Install cargo-workspaces
+        run: cargo install cargo-workspaces
+
+      - name: Publish to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
-          cd fluxencrypt
-          cargo publish --token $CARGO_REGISTRY_TOKEN
-
-      - name: Wait for crates.io to update
-        run: sleep 60
-
-      - name: Publish fluxencrypt-async
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: |
-          cd fluxencrypt-async
-          cargo publish --token $CARGO_REGISTRY_TOKEN
-
-      - name: Wait for crates.io to update
-        run: sleep 60
-
-      - name: Publish fluxencrypt-cli
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: |
-          cd fluxencrypt-cli
-          cargo publish --token $CARGO_REGISTRY_TOKEN
+          # Use cargo-workspaces to publish in dependency order
+          cargo workspaces publish \
+            --from-git \
+            --yes \
+            --token $CARGO_REGISTRY_TOKEN \
+            --no-verify
 
   # Build and publish Docker images
   docker_build:
