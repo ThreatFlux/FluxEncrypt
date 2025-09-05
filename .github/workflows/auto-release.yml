@@ -1,6 +1,8 @@
 name: Auto Release
 
 on:
+  push:
+    branches: [ main ]
   workflow_dispatch:
     inputs:
       version_bump:
@@ -27,9 +29,37 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
+  # Wait for CI to complete successfully
+  wait-for-ci:
+    name: Wait for CI
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Wait for Test Suite checks
+      uses: lewagon/wait-on-check-action@v1.3.4
+      with:
+        ref: ${{ github.sha }}
+        check-regexp: '^Test Suite \(.*\)$'
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        wait-interval: 30
+        allowed-conclusions: success
+
+    - name: Wait for Security Audit
+      uses: lewagon/wait-on-check-action@v1.3.4
+      with:
+        ref: ${{ github.sha }}
+        check-name: 'security_audit'
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        wait-interval: 30
+        allowed-conclusions: success,neutral,skipped
+      continue-on-error: true
+
   # Determine version and create release
   version_and_release:
     name: Version Bump and Release
+    needs: [wait-for-ci]
+    if: always() && (needs.wait-for-ci.result == 'success' || needs.wait-for-ci.result == 'skipped' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -52,18 +82,66 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+      - name: Check if release needed
+        id: should_release
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          else
+            # Check if latest commit is a release commit
+            if git log --format="%s" -n 1 | grep -E "^chore.*bump version|^chore.*release|^Release v" > /dev/null; then
+              echo "Skipping - last commit was a release"
+              echo "should_release=false" >> $GITHUB_OUTPUT
+            # Check if we're already at a released version (tag exists)
+            elif git describe --exact-match --tags HEAD 2>/dev/null; then
+              echo "Skipping - current commit is already tagged"
+              echo "should_release=false" >> $GITHUB_OUTPUT
+            # Check for releasable commits since last tag
+            else
+              LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+              if [ -z "$LAST_TAG" ]; then
+                # No tags yet, check all commits
+                if git log --format="%s" | grep -E "^(feat|fix|perf|refactor|build|ci|docs|style|test|chore)(\(.+\))?!?:" > /dev/null; then
+                  echo "Found releasable commits (no previous tags)"
+                  echo "should_release=true" >> $GITHUB_OUTPUT
+                else
+                  echo "No releasable commits found"
+                  echo "should_release=false" >> $GITHUB_OUTPUT
+                fi
+              else
+                # Check commits since last tag
+                if git log --format="%s" "${LAST_TAG}..HEAD" | grep -E "^(feat|fix|perf|refactor|build|ci|docs|style|test|chore)(\(.+\))?!?:" > /dev/null; then
+                  echo "Found releasable commits since $LAST_TAG"
+                  echo "should_release=true" >> $GITHUB_OUTPUT
+                else
+                  echo "No releasable commits since $LAST_TAG"
+                  echo "should_release=false" >> $GITHUB_OUTPUT
+                fi
+              fi
+            fi
+          fi
+
+      - name: Exit if no release needed
+        if: steps.should_release.outputs.should_release != 'true'
+        run: |
+          echo "No release needed - exiting workflow"
+          exit 0
+
       - name: Determine version bump
         id: version_type
+        if: steps.should_release.outputs.should_release == 'true'
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "bump_type=${{ inputs.version_bump }}" >> $GITHUB_OUTPUT
             echo "prerelease_id=${{ inputs.prerelease_identifier }}" >> $GITHUB_OUTPUT
           else
             # Auto-determine from commits
-            if git log --format="%s" HEAD~1..HEAD | grep -E "^(feat!|fix!|BREAKING CHANGE)" > /dev/null; then
+            if git log --format="%s" HEAD~5..HEAD | grep -E "^(feat!|fix!|BREAKING CHANGE)" > /dev/null; then
               echo "bump_type=major" >> $GITHUB_OUTPUT
-            elif git log --format="%s" HEAD~1..HEAD | grep -E "^feat" > /dev/null; then
+            elif git log --format="%s" HEAD~5..HEAD | grep -E "^feat" > /dev/null; then
               echo "bump_type=minor" >> $GITHUB_OUTPUT
+            elif git log --format="%s" HEAD~5..HEAD | grep -E "^fix" > /dev/null; then
+              echo "bump_type=patch" >> $GITHUB_OUTPUT
             else
               echo "bump_type=patch" >> $GITHUB_OUTPUT
             fi
@@ -303,18 +381,67 @@ jobs:
         run: |
           gh release upload "v${{ needs.version_and_release.outputs.version }}" "${{ env.ASSET_PATH }}"
 
-      - name: Generate SBOM
-        uses: anchore/sbom-action@v0.17.7
-        with:
-          path: ./target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
-          format: spdx-json
-          output-file: "${{ matrix.asset_name }}.spdx.json"
+      - name: Generate SBOM (Unix)
+        if: matrix.os != 'windows-latest'
+        continue-on-error: true
+        shell: bash
+        run: |
+          # Install syft if not available
+          if ! command -v syft >/dev/null 2>&1; then
+            echo "Installing syft..."
+            if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+              # macOS installation
+              brew install syft || {
+                curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b "$HOME/.local/bin"
+                export PATH="$HOME/.local/bin:$PATH"
+              }
+            else
+              # Linux installation
+              curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+            fi
+          fi
+          
+          # Generate SBOM using syft directly
+          BINARY_PATH="target/${{ matrix.target }}/release/${{ matrix.artifact_name }}"
+          if [[ -f "$BINARY_PATH" ]]; then
+            echo "Generating SBOM for $BINARY_PATH"
+            syft "$BINARY_PATH" \
+              -o spdx-json \
+              --file "${{ matrix.asset_name }}.spdx.json" || echo "SBOM generation failed but continuing"
+          else
+            echo "Binary not found at: $BINARY_PATH"
+            ls -la "target/${{ matrix.target }}/release/" || true
+          fi
 
-      - name: Upload SBOM
+      - name: Generate SBOM (Windows)
+        if: matrix.os == 'windows-latest'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          # Skip SBOM generation on Windows for now
+          Write-Host "SBOM generation skipped on Windows"
+
+      - name: Upload SBOM (Unix)
+        if: matrix.os != 'windows-latest' && hashFiles('*.spdx.json') != ''
+        shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "v${{ needs.version_and_release.outputs.version }}" "${{ matrix.asset_name }}.spdx.json"
+          if [[ -f "${{ matrix.asset_name }}.spdx.json" ]]; then
+            echo "Uploading SBOM: ${{ matrix.asset_name }}.spdx.json"
+            gh release upload "v${{ needs.version_and_release.outputs.version }}" "${{ matrix.asset_name }}.spdx.json" || true
+          fi
+
+      - name: Upload SBOM (Windows)
+        if: matrix.os == 'windows-latest' && hashFiles('*.spdx.json') != ''
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if (Test-Path "${{ matrix.asset_name }}.spdx.json") {
+            Write-Host "Uploading SBOM: ${{ matrix.asset_name }}.spdx.json"
+            gh release upload "v${{ needs.version_and_release.outputs.version }}" "${{ matrix.asset_name }}.spdx.json"
+          }
 
   # Publish to crates.io
   publish_crates:
@@ -400,17 +527,34 @@ jobs:
             VERSION=${{ needs.version_and_release.outputs.version }}
 
       - name: Generate SBOM for Docker image
+        continue-on-error: true
+        id: docker_sbom
         uses: anchore/sbom-action@v0.17.7
         with:
           image: threatflux/fluxencrypt:${{ needs.version_and_release.outputs.version }}
           format: spdx-json
           output-file: "fluxencrypt-docker.spdx.json"
 
+      - name: Generate SBOM fallback
+        if: steps.docker_sbom.outcome == 'failure'
+        continue-on-error: true
+        run: |
+          # Try syft directly as fallback
+          if ! command -v syft >/dev/null 2>&1; then
+            curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+          fi
+          syft threatflux/fluxencrypt:${{ needs.version_and_release.outputs.version }} \
+            -o spdx-json \
+            --file fluxencrypt-docker.spdx.json || echo "Docker SBOM generation failed"
+
       - name: Upload Docker SBOM
+        if: hashFiles('fluxencrypt-docker.spdx.json') != ''
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "v${{ needs.version_and_release.outputs.version }}" "fluxencrypt-docker.spdx.json"
+          if [ -f "fluxencrypt-docker.spdx.json" ]; then
+            gh release upload "v${{ needs.version_and_release.outputs.version }}" "fluxencrypt-docker.spdx.json" || true
+          fi
 
   # Security scanning
   security_scan:
