@@ -379,7 +379,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "v${{ needs.version_and_release.outputs.version }}" "${{ env.ASSET_PATH }}"
+          # Delete existing asset if it exists (for re-runs)
+          gh release delete-asset "v${{ needs.version_and_release.outputs.version }}" \
+            "$(basename "${{ env.ASSET_PATH }}")" --yes 2>/dev/null || true
+          
+          # Upload the asset
+          gh release upload "v${{ needs.version_and_release.outputs.version }}" \
+            "${{ env.ASSET_PATH }}" --clobber
 
       - name: Generate SBOM (Unix)
         if: matrix.os != 'windows-latest'
@@ -429,7 +435,12 @@ jobs:
         run: |
           if [[ -f "${{ matrix.asset_name }}.spdx.json" ]]; then
             echo "Uploading SBOM: ${{ matrix.asset_name }}.spdx.json"
-            gh release upload "v${{ needs.version_and_release.outputs.version }}" "${{ matrix.asset_name }}.spdx.json" || true
+            # Delete existing SBOM if it exists
+            gh release delete-asset "v${{ needs.version_and_release.outputs.version }}" \
+              "${{ matrix.asset_name }}.spdx.json" --yes 2>/dev/null || true
+            # Upload the SBOM
+            gh release upload "v${{ needs.version_and_release.outputs.version }}" \
+              "${{ matrix.asset_name }}.spdx.json" --clobber || true
           fi
 
       - name: Upload SBOM (Windows)
@@ -440,7 +451,12 @@ jobs:
         run: |
           if (Test-Path "${{ matrix.asset_name }}.spdx.json") {
             Write-Host "Uploading SBOM: ${{ matrix.asset_name }}.spdx.json"
-            gh release upload "v${{ needs.version_and_release.outputs.version }}" "${{ matrix.asset_name }}.spdx.json"
+            # Delete existing SBOM if it exists
+            gh release delete-asset "v${{ needs.version_and_release.outputs.version }}" `
+              "${{ matrix.asset_name }}.spdx.json" --yes 2>$null
+            # Upload the SBOM
+            gh release upload "v${{ needs.version_and_release.outputs.version }}" `
+              "${{ matrix.asset_name }}.spdx.json" --clobber
           }
 
   # Publish to crates.io
@@ -553,7 +569,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ -f "fluxencrypt-docker.spdx.json" ]; then
-            gh release upload "v${{ needs.version_and_release.outputs.version }}" "fluxencrypt-docker.spdx.json" || true
+            # Delete existing Docker SBOM if it exists
+            gh release delete-asset "v${{ needs.version_and_release.outputs.version }}" \
+              "fluxencrypt-docker.spdx.json" --yes 2>/dev/null || true
+            # Upload the Docker SBOM
+            gh release upload "v${{ needs.version_and_release.outputs.version }}" \
+              "fluxencrypt-docker.spdx.json" --clobber || true
           fi
 
   # Security scanning
@@ -578,7 +599,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "v${{ needs.version_and_release.outputs.version }}" "trivy-results.sarif"
+          # Delete existing scan results if they exist
+          gh release delete-asset "v${{ needs.version_and_release.outputs.version }}" \
+            "trivy-results.sarif" --yes 2>/dev/null || true
+          # Upload the scan results
+          gh release upload "v${{ needs.version_and_release.outputs.version }}" \
+            "trivy-results.sarif" --clobber || true
 
   # Update documentation
   update_docs:
