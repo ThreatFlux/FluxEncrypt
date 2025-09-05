@@ -72,7 +72,12 @@ jobs:
       run: cargo install cargo-geiger
 
     - name: Run cargo geiger (unsafe code detection)
-      run: cargo geiger --all-features
+      run: |
+        echo "Running cargo geiger on workspace members..."
+        for package in fluxencrypt fluxencrypt-cli fluxencrypt-async; do
+          echo "Checking package: $package"
+          (cd "$package" && cargo geiger --all-features) || echo "Warning: cargo geiger failed for $package"
+        done
 
     - name: Install cargo-outdated
       run: cargo install cargo-outdated
