@@ -38,13 +38,34 @@ jobs:
     name: Wait for CI
     runs-on: ubuntu-latest
     steps:
-      - name: Wait for CI checks
+      - name: Wait for Test Suite checks
         uses: lewagon/wait-on-check-action@v1.3.4
         with:
           ref: ${{ github.sha }}
-          check-name: 'Test Suite'
+          check-regexp: '^Test Suite \(.*\)$'
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           wait-interval: 30
+          allowed-conclusions: success
+          
+      - name: Wait for Cross Compile checks
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.sha }}
+          check-regexp: '^Cross Compile \(.*\)$'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 30
+          allowed-conclusions: success
+        continue-on-error: true
+          
+      - name: Wait for Security Audit
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.sha }}
+          check-name: 'security_audit'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 30
+          allowed-conclusions: success,neutral,skipped
+        continue-on-error: true
 
   # Determine version and create release
   version_and_release:
