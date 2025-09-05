@@ -16,7 +16,7 @@ homepage = "https://github.com/ThreatFlux/fluxencrypt"
 documentation = "https://docs.rs/fluxencrypt"
 keywords = ["encryption", "cryptography", "security", "aes", "rsa"]
 categories = ["cryptography", "command-line-utilities"]
-rust-version = "1.85.0"
+rust-version = "1.89.0"
 
 [workspace.dependencies]
 # Core cryptography

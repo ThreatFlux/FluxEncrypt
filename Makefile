@@ -222,20 +222,20 @@ bench-streaming:
 
 # Check MSRV (Minimum Supported Rust Version)
 msrv:
-	@echo "🦀 Checking MSRV (1.85.0)..."
-	@if rustup toolchain list | grep -q "1.85.0"; then \
-		cargo +1.85.0 check --workspace --all-features; \
+	@echo "🦀 Checking MSRV (1.89.0)..."
+	@if rustup toolchain list | grep -q "1.89.0"; then \
+		cargo +1.89.0 check --workspace --all-features; \
 	else \
-		echo "⚠️  MSRV toolchain 1.85.0 not installed. Installing..."; \
-		rustup toolchain install 1.85.0 --component rustfmt,clippy; \
-		cargo +1.85.0 check --workspace --all-features; \
+		echo "⚠️  MSRV toolchain 1.89.0 not installed. Installing..."; \
+		rustup toolchain install 1.89.0 --component rustfmt,clippy; \
+		cargo +1.89.0 check --workspace --all-features; \
 	fi
 	@echo "✅ MSRV check complete"
 
 # Install MSRV toolchain if not present
 msrv-install:
-	@echo "🦀 Installing MSRV toolchain (1.85.0)..."
-	@rustup toolchain install 1.85.0 --component rustfmt,clippy
+	@echo "🦀 Installing MSRV toolchain (1.89.0)..."
+	@rustup toolchain install 1.89.0 --component rustfmt,clippy
 	@echo "✅ MSRV toolchain installed"
 
 # Test feature combinations

@@ -7,7 +7,7 @@ cognitive-complexity-threshold = 30
 too-many-lines-threshold = 100
 
 # The minimum rust version
-msrv = "1.85.0"
+msrv = "1.89.0"
 
 # Whether to allow mixed uninlined format args, e.g. `format!("{} {}", a, foo.bar)`
 allow-mixed-uninlined-format-args = false
