@@ -355,7 +355,7 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }} -p fluxencrypt-cli
 
       - name: Strip binary (Unix only)
-        if: matrix.os != 'windows-latest'
+        if: matrix.os != 'windows-latest' && !contains(matrix.target, 'aarch64')
         run: |
           if command -v strip > /dev/null; then
             strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
