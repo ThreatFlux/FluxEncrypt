@@ -1,12 +1,6 @@
 name: Auto Release
 
 on:
-  push:
-    branches: [ main ]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - '.github/workflows/docs.yml'
   workflow_dispatch:
     inputs:
       version_bump:
@@ -33,44 +27,9 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  # Wait for CI to complete
-  wait_for_ci:
-    name: Wait for CI
-    runs-on: ubuntu-latest
-    steps:
-      - name: Wait for Test Suite checks
-        uses: lewagon/wait-on-check-action@v1.3.4
-        with:
-          ref: ${{ github.sha }}
-          check-regexp: '^Test Suite \(.*\)$'
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 30
-          allowed-conclusions: success
-          
-      - name: Wait for Cross Compile checks
-        uses: lewagon/wait-on-check-action@v1.3.4
-        with:
-          ref: ${{ github.sha }}
-          check-regexp: '^Cross Compile \(.*\)$'
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 30
-          allowed-conclusions: success
-        continue-on-error: true
-          
-      - name: Wait for Security Audit
-        uses: lewagon/wait-on-check-action@v1.3.4
-        with:
-          ref: ${{ github.sha }}
-          check-name: 'security_audit'
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 30
-          allowed-conclusions: success,neutral,skipped
-        continue-on-error: true
-
   # Determine version and create release
   version_and_release:
     name: Version Bump and Release
-    needs: wait_for_ci
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -196,18 +155,34 @@ jobs:
           cat RELEASE_NOTES.md >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Commit version bump
+      - name: Check for changes and commit
+        id: commit
         run: |
           git add .
-          git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
-          git push origin main
+          if git diff --staged --quiet; then
+            echo "No changes to commit - version already at ${{ steps.version.outputs.version }}"
+            echo "changes=false" >> $GITHUB_OUTPUT
+          else
+            git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
+            git push origin main
+            echo "changes=true" >> $GITHUB_OUTPUT
+          fi
 
       - name: Create and push tag
+        id: tag
         run: |
-          git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
-          git push origin "v${{ steps.version.outputs.version }}"
+          TAG="v${{ steps.version.outputs.version }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists"
+            echo "tag_exists=true" >> $GITHUB_OUTPUT
+          else
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+            echo "tag_exists=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Create GitHub Release
+        if: steps.tag.outputs.tag_exists != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
