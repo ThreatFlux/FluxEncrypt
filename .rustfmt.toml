@@ -6,8 +6,8 @@ edition = "2021"
 # Maximum width of each line
 max_width = 100
 
-# Ideal width of each line (used for comments and strings)
-comment_width = 80
+# Ideal width of each line (used for comments and strings) - NIGHTLY ONLY
+# comment_width = 80
 
 # Hard tab or soft tab
 hard_tabs = false
@@ -16,13 +16,14 @@ hard_tabs = false
 tab_spaces = 4
 
 # Maximum width of the args of a function call before falling back to vertical formatting
-fn_args_layout = "Tall"
+# fn_args_layout was deprecated, use fn_params_layout instead
+fn_params_layout = "Tall"
 
-# Maximum width of the args of a struct initializer before falling back to vertical formatting
-struct_field_align_threshold = 0
+# Maximum width of the args of a struct initializer before falling back to vertical formatting - NIGHTLY ONLY
+# struct_field_align_threshold = 0
 
-# Where to put a binary operator when a binary expression goes multiline
-binop_separator = "Front"
+# Where to put a binary operator when a binary expression goes multiline - NIGHTLY ONLY
+# binop_separator = "Front"
 
 # Remove blank lines at the start or end of a block
 remove_nested_parens = true
@@ -30,53 +31,53 @@ remove_nested_parens = true
 # Use small heuristics to determine parameter layout
 use_small_heuristics = "Default"
 
-# Format strings
-format_strings = true
+# Format strings - NIGHTLY ONLY
+# format_strings = true
 
-# Format the metavariable matching patterns in macros
-format_macro_matchers = true
+# Format the metavariable matching patterns in macros - NIGHTLY ONLY
+# format_macro_matchers = true
 
-# Control the layout of imports and extern crate items
-imports_layout = "Mixed"
+# Control the layout of imports and extern crate items - NIGHTLY ONLY
+# imports_layout = "Mixed"
 
-# Merge or split imports/extern crates whose paths are matching
-merge_imports = true
+# Merge or split imports/extern crates whose paths are matching - NIGHTLY ONLY
+# merge_imports = true
 
-# Group imports by module
-group_imports = "StdExternalCrate"
+# Group imports by module - NIGHTLY ONLY
+# group_imports = "StdExternalCrate"
 
 # Controls the ordering of imports
 reorder_imports = true
 
-# Controls the ordering of extern crate statements
-reorder_extern_crates = true
+# Controls the ordering of extern crate statements - UNKNOWN OPTION, REMOVED
+# reorder_extern_crates = true
 
-# Reorder impl items
-reorder_impl_items = true
+# Reorder impl items - NIGHTLY ONLY
+# reorder_impl_items = true
 
-# Add trailing commas
-trailing_comma = "Vertical"
+# Add trailing commas - NIGHTLY ONLY
+# trailing_comma = "Vertical"
 
-# If true, the empty line at the beginning of the file is removed
-skip_children = false
+# If true, the empty line at the beginning of the file is removed - NIGHTLY ONLY
+# skip_children = false
 
-# Control the case of the letters in hexadecimal literal values
-hex_literal_case = "Lower"
+# Control the case of the letters in hexadecimal literal values - NIGHTLY ONLY
+# hex_literal_case = "Lower"
 
-# Use verbose comments
-verbose_comments = false
+# Use verbose comments - UNKNOWN OPTION, REMOVED
+# verbose_comments = false
 
-# Controls the positioning of leading comments in multiline function calls
-normalize_comments = true
+# Controls the positioning of leading comments in multiline function calls - NIGHTLY ONLY
+# normalize_comments = true
 
-# Format doc comments
-normalize_doc_attributes = true
+# Format doc comments - NIGHTLY ONLY
+# normalize_doc_attributes = true
 
 # Controls the ordering of module stmts
 reorder_modules = true
 
-# Force multiline if any argument has line comment
-force_multiline_blocks = false
+# Force multiline if any argument has line comment - NIGHTLY ONLY
+# force_multiline_blocks = false
 
 # Merge multiple derives into one
 merge_derives = true
@@ -84,14 +85,14 @@ merge_derives = true
 # Use field initializer shorthand if possible
 use_field_init_shorthand = false
 
-# Don't format the contents of raw string literals
-format_code_in_doc_comments = true
+# Don't format the contents of raw string literals - NIGHTLY ONLY
+# format_code_in_doc_comments = true
 
-# Wrap multiline match arms in blocks
-wrap_matches = true
+# Wrap multiline match arms in blocks - UNKNOWN OPTION, REMOVED
+# wrap_matches = true
 
-# Controls the order of match arms
-match_arm_blocks = true
+# Controls the order of match arms - NIGHTLY ONLY
+# match_arm_blocks = true
 
 # Indent match arms instead of keeping them at the same indentation level as the match keyword
 match_arm_leading_pipes = "Never"
@@ -99,14 +100,14 @@ match_arm_leading_pipes = "Never"
 # Force single line if-else formatting
 force_explicit_abi = true
 
-# Combine control expressions with function calls
-combine_control_expr = true
+# Combine control expressions with function calls - NIGHTLY ONLY
+# combine_control_expr = true
 
-# Require a specific version of rustfmt
-required_version = "1.7.0"
+# Require a specific version of rustfmt - NIGHTLY ONLY
+# required_version = "1.7.0"
 
 # Use try shorthand
 use_try_shorthand = false
 
-# Format generated files
-format_generated_files = true
+# Format generated files - NIGHTLY ONLY
+# format_generated_files = true

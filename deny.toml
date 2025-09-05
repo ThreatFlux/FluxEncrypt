@@ -20,15 +20,15 @@ allow = [
     "Apache-2.0",
     "Apache-2.0 WITH LLVM-exception",
     "BSD-2-Clause",
-    "BSD-3-Clause",
+    # "BSD-3-Clause", # Not used by current dependencies
     "ISC",
-    "Unicode-DFS-2016",
+    # "Unicode-DFS-2016", # Not used by current dependencies
     "MPL-2.0",
     "Unicode-3.0",
 ]
 confidence-threshold = 0.8
 exceptions = [
-    { allow = ["OpenSSL"], crate = "ring" },
+    # { allow = ["OpenSSL"], crate = "ring" }, # Not needed for current ring version
 ]
 
 [bans]
