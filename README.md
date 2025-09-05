@@ -142,13 +142,13 @@ FluxEncrypt includes a powerful CLI for file encryption operations:
 cargo install fluxencrypt-cli
 
 # Generate a new key pair
-fluxencrypt keygen --output-dir ./keys
+fluxencrypt-cli keygen --output-dir ./keys
 
 # Encrypt a file
-fluxencrypt encrypt --key ./keys/public.pem --input document.pdf --output document.pdf.enc
+fluxencrypt-cli encrypt --key ./keys/public.pem --input document.pdf --output document.pdf.enc
 
 # Decrypt a file  
-fluxencrypt decrypt --key ./keys/private.pem --input document.pdf.enc --output document.pdf
+fluxencrypt-cli decrypt --key ./keys/private.pem --input document.pdf.enc --output document.pdf
 
 # Batch encrypt multiple files
 fluxencrypt batch-encrypt --key ./keys/public.pem --input-dir ./documents --output-dir ./encrypted

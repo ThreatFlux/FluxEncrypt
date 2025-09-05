@@ -81,19 +81,19 @@ test-unit:
 # Run integration tests
 test-integration:
 	@echo "🧪 Running integration tests..."
-	@cargo test --test integration_test --all-features
+	@cargo test -p fluxencrypt --test integration_test --all-features
 	@echo "✅ Integration tests passed"
 
 # Run end-to-end tests
 test-e2e:
 	@echo "🧪 Running end-to-end tests..."
-	@cargo test --test e2e_test --all-features
+	@cargo test -p fluxencrypt --test e2e_test --all-features
 	@echo "✅ E2E tests passed"
 
 # Run property-based tests
 test-property:
 	@echo "🧪 Running property tests..."
-	@cargo test --test property_tests --all-features
+	@cargo test -p fluxencrypt --test property_tests --all-features
 	@echo "✅ Property tests passed"
 
 # Test workspace members individually
@@ -137,6 +137,14 @@ doc:
 # Check documentation with warnings as errors
 doc-check:
 	@echo "📖 Checking documentation..."
+	@cargo doc --workspace --all-features --no-deps 2>&1 | tee doc-output.log
+	@if grep -q "error\|warning: output filename collision" doc-output.log; then \
+		echo "❌ Documentation errors found!"; \
+		cat doc-output.log; \
+		rm doc-output.log; \
+		exit 1; \
+	fi
+	@rm -f doc-output.log
 	@RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps --document-private-items
 	@echo "✅ Documentation check passed"
 
@@ -283,8 +291,8 @@ docker-build:
 # Docker test
 docker-test:
 	@echo "🐳 Testing in Docker..."
-	@docker run --rm fluxencrypt:latest fluxencrypt --version
-	@docker run --rm fluxencrypt:alpine fluxencrypt --version
+	@docker run --rm fluxencrypt:latest fluxencrypt-cli --version
+	@docker run --rm fluxencrypt:alpine fluxencrypt-cli --version
 	@echo "✅ Docker tests passed"
 
 # Profile code performance

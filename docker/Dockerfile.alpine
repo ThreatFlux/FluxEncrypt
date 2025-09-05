@@ -35,7 +35,7 @@ RUN rm -rf fluxencrypt/src fluxencrypt-cli/src fluxencrypt-async/src
 COPY . .
 
 # Build the application
-RUN cargo build --release --bin fluxencrypt
+RUN cargo build --release --bin fluxencrypt-cli
 
 # Runtime stage
 FROM alpine:3.18
@@ -46,10 +46,10 @@ RUN apk add --no-cache \
     && adduser -D -s /bin/sh fluxencrypt
 
 # Copy the binary from builder stage
-COPY --from=builder /usr/src/fluxencrypt/target/release/fluxencrypt /usr/local/bin/fluxencrypt
+COPY --from=builder /usr/src/fluxencrypt/target/release/fluxencrypt-cli /usr/local/bin/fluxencrypt-cli
 
 # Set proper permissions
-RUN chmod +x /usr/local/bin/fluxencrypt
+RUN chmod +x /usr/local/bin/fluxencrypt-cli
 
 # Create data directory
 RUN mkdir -p /data && chown fluxencrypt:fluxencrypt /data
@@ -61,12 +61,12 @@ USER fluxencrypt
 WORKDIR /data
 
 # Default command
-ENTRYPOINT ["fluxencrypt"]
+ENTRYPOINT ["fluxencrypt-cli"]
 CMD ["--help"]
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD fluxencrypt --version || exit 1
+    CMD fluxencrypt-cli --version || exit 1
 
 # Labels for metadata
 LABEL org.opencontainers.image.title="FluxEncrypt Alpine"

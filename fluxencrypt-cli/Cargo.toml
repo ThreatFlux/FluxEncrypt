@@ -13,7 +13,7 @@ rust-version.workspace = true
 description = "Command line interface for FluxEncrypt encryption SDK"
 
 [[bin]]
-name = "fluxencrypt"
+name = "fluxencrypt-cli"
 path = "src/main.rs"
 
 [dependencies]

@@ -3,11 +3,11 @@
 //! These tests verify that cryptographic properties hold for arbitrary inputs,
 //! providing stronger assurance than example-based tests alone.
 
-use proptest::prelude::*;
-use fluxencrypt::{Config, HybridCipher};
-use fluxencrypt::keys::KeyPair;
 use fluxencrypt::config::{CipherSuite, RsaKeySize};
 use fluxencrypt::encryption::aes_gcm::{AesGcmCipher, AesKey};
+use fluxencrypt::keys::KeyPair;
+use fluxencrypt::{Config, HybridCipher};
+use proptest::prelude::*;
 
 // Test that encryption is deterministic for same input with same key and nonce
 proptest! {
@@ -18,25 +18,25 @@ proptest! {
     ) {
         let cipher = AesGcmCipher::new(CipherSuite::Aes256Gcm);
         let key = AesKey::generate(CipherSuite::Aes256Gcm).unwrap();
-        
+
         // Generate nonce once and reuse
         let (nonce1, ciphertext1) = cipher.encrypt(&key, &data, aad.as_deref()).unwrap();
-        
+
         // Manual encryption with same nonce (this would require exposing internals)
         // For now, we test that the same key with random nonces produces valid decryption
         let (nonce2, ciphertext2) = cipher.encrypt(&key, &data, aad.as_deref()).unwrap();
-        
+
         // Both should decrypt to same plaintext
         let decrypted1 = cipher.decrypt(&key, &nonce1, &ciphertext1, aad.as_deref()).unwrap();
         let decrypted2 = cipher.decrypt(&key, &nonce2, &ciphertext2, aad.as_deref()).unwrap();
-        
-        prop_assert_eq!(decrypted1, data);
-        prop_assert_eq!(decrypted2, data);
-        
+
+        prop_assert_eq!(decrypted1, data.clone());
+        prop_assert_eq!(decrypted2, data.clone());
+
         // Different nonces should produce different ciphertexts (with high probability)
-        if data.len() > 0 {
-            prop_assert_ne!(nonce1, nonce2);
-            prop_assert_ne!(ciphertext1, ciphertext2);
+        if !data.is_empty() {
+            prop_assert_ne!(&nonce1, &nonce2);
+            prop_assert_ne!(&ciphertext1, &ciphertext2);
         }
     }
 }
@@ -54,20 +54,20 @@ proptest! {
     ) {
         let cipher = AesGcmCipher::new(cipher_suite);
         let key = AesKey::generate(cipher_suite).unwrap();
-        
+
         let (nonce, ciphertext) = cipher.encrypt(&key, &data, aad.as_deref()).unwrap();
         let decrypted = cipher.decrypt(&key, &nonce, &ciphertext, aad.as_deref()).unwrap();
-        
-        prop_assert_eq!(decrypted, data);
-        
+
+        prop_assert_eq!(decrypted, data.clone());
+
         // Ciphertext should be larger than plaintext (due to auth tag) unless empty
         if !data.is_empty() {
             prop_assert!(ciphertext.len() > data.len());
         }
-        
+
         // Auth tag should be exactly 16 bytes
         prop_assert_eq!(ciphertext.len(), data.len() + 16);
-        
+
         // Nonce should be exactly 12 bytes for GCM
         prop_assert_eq!(nonce.len(), 12);
     }
@@ -85,13 +85,13 @@ proptest! {
         if aad1 != aad2 {
             let cipher = AesGcmCipher::new(CipherSuite::Aes256Gcm);
             let key = AesKey::generate(CipherSuite::Aes256Gcm).unwrap();
-            
+
             let (nonce, ciphertext) = cipher.encrypt(&key, &data, Some(&aad1)).unwrap();
-            
+
             // Should succeed with correct AAD
             let decrypted = cipher.decrypt(&key, &nonce, &ciphertext, Some(&aad1)).unwrap();
-            prop_assert_eq!(decrypted, data);
-            
+            prop_assert_eq!(decrypted, data.clone());
+
             // Should fail with different AAD
             let result = cipher.decrypt(&key, &nonce, &ciphertext, Some(&aad2));
             prop_assert!(result.is_err());
@@ -121,12 +121,12 @@ proptest! {
             .build()
             .unwrap();
         let cipher = HybridCipher::new(config);
-        
+
         let ciphertext = cipher.encrypt(keypair.public_key(), &data).unwrap();
         let decrypted = cipher.decrypt(keypair.private_key(), &ciphertext).unwrap();
-        
-        prop_assert_eq!(decrypted, data);
-        
+
+        prop_assert_eq!(decrypted, data.clone());
+
         // Ciphertext should be significantly larger than plaintext due to overhead
         prop_assert!(ciphertext.len() > data.len() + 200); // RSA overhead + AES overhead
     }
@@ -141,27 +141,27 @@ proptest! {
         let cipher = AesGcmCipher::new(CipherSuite::Aes256Gcm);
         let key1 = AesKey::generate(CipherSuite::Aes256Gcm).unwrap();
         let key2 = AesKey::generate(CipherSuite::Aes256Gcm).unwrap();
-        
+
         let (nonce1, ciphertext1) = cipher.encrypt(&key1, &data, None).unwrap();
         let (nonce2, ciphertext2) = cipher.encrypt(&key2, &data, None).unwrap();
-        
+
         // Keys should be different (extremely high probability)
         prop_assert_ne!(key1.as_bytes(), key2.as_bytes());
-        
+
         // Ciphertexts should be different (extremely high probability)
-        prop_assert_ne!(ciphertext1, ciphertext2);
-        
+        prop_assert_ne!(&ciphertext1, &ciphertext2);
+
         // Each should decrypt correctly with its own key
         let decrypted1 = cipher.decrypt(&key1, &nonce1, &ciphertext1, None).unwrap();
         let decrypted2 = cipher.decrypt(&key2, &nonce2, &ciphertext2, None).unwrap();
-        
-        prop_assert_eq!(decrypted1, data);
+
+        prop_assert_eq!(decrypted1, data.clone());
         prop_assert_eq!(decrypted2, data);
-        
+
         // Should fail with wrong keys
         let result1 = cipher.decrypt(&key2, &nonce1, &ciphertext1, None);
         let result2 = cipher.decrypt(&key1, &nonce2, &ciphertext2, None);
-        
+
         prop_assert!(result1.is_err());
         prop_assert!(result2.is_err());
     }
@@ -179,25 +179,25 @@ proptest! {
     ) {
         let keypair1 = KeyPair::generate(key_size).unwrap();
         let keypair2 = KeyPair::generate(key_size).unwrap();
-        
+
         // Basic properties
         prop_assert_eq!(keypair1.public_key().key_size_bits(), key_size);
         prop_assert_eq!(keypair1.private_key().key_size_bits(), key_size);
         prop_assert_eq!(keypair2.public_key().key_size_bits(), key_size);
         prop_assert_eq!(keypair2.private_key().key_size_bits(), key_size);
-        
+
         // Keys should be different
         prop_assert_ne!(keypair1.public_key().modulus(), keypair2.public_key().modulus());
         prop_assert_ne!(keypair1.private_key().modulus(), keypair2.private_key().modulus());
-        
+
         // Public and private key moduli should match within each pair
         prop_assert_eq!(keypair1.public_key().modulus(), keypair1.private_key().modulus());
         prop_assert_eq!(keypair2.public_key().modulus(), keypair2.private_key().modulus());
-        
+
         // MSB should be set for proper key size
         prop_assert!(keypair1.public_key().modulus()[0] & 0x80 != 0);
         prop_assert!(keypair2.public_key().modulus()[0] & 0x80 != 0);
-        
+
         // Standard public exponent (65537)
         prop_assert_eq!(keypair1.public_key().public_exponent(), &vec![0x01, 0x00, 0x01]);
         prop_assert_eq!(keypair2.public_key().public_exponent(), &vec![0x01, 0x00, 0x01]);
@@ -215,23 +215,23 @@ proptest! {
     ) {
         let key1 = AesKey::generate(cipher_suite).unwrap();
         let key2 = AesKey::generate(cipher_suite).unwrap();
-        
+
         let expected_len = match cipher_suite {
             CipherSuite::Aes128Gcm => 16,
             CipherSuite::Aes256Gcm => 32,
         };
-        
+
         // Correct key lengths
         prop_assert_eq!(key1.as_bytes().len(), expected_len);
         prop_assert_eq!(key2.as_bytes().len(), expected_len);
-        
+
         // Keys should be different (extremely high probability)
         prop_assert_ne!(key1.as_bytes(), key2.as_bytes());
-        
+
         // Keys should not be all zeros (extremely high probability)
         prop_assert_ne!(key1.as_bytes(), &vec![0u8; expected_len]);
         prop_assert_ne!(key2.as_bytes(), &vec![0u8; expected_len]);
-        
+
         // Keys should not be all 0xFF (extremely high probability)
         prop_assert_ne!(key1.as_bytes(), &vec![0xFFu8; expected_len]);
         prop_assert_ne!(key2.as_bytes(), &vec![0xFFu8; expected_len]);
@@ -265,10 +265,10 @@ proptest! {
             .secure_memory(secure_memory)
             .build()
             .unwrap();
-            
+
         // All generated configs should be valid
         prop_assert!(config.validate().is_ok());
-        
+
         // Properties should be set correctly
         prop_assert_eq!(config.cipher_suite, cipher_suite);
         prop_assert_eq!(config.rsa_key_size, rsa_key_size);
@@ -289,17 +289,17 @@ proptest! {
     ) {
         let cipher = AesGcmCipher::new(CipherSuite::Aes256Gcm);
         let key = AesKey::generate(CipherSuite::Aes256Gcm).unwrap();
-        
+
         let (nonce, mut ciphertext) = cipher.encrypt(&key, &data, None).unwrap();
-        
+
         // Only tamper if position is within bounds
         if tamper_position < ciphertext.len() {
             let original_byte = ciphertext[tamper_position];
-            
+
             // Only tamper if it actually changes the byte
             if tamper_value != original_byte {
                 ciphertext[tamper_position] = tamper_value;
-                
+
                 // Tampered ciphertext should fail to decrypt
                 let result = cipher.decrypt(&key, &nonce, &ciphertext, None);
                 prop_assert!(result.is_err());
@@ -317,16 +317,16 @@ proptest! {
     ) {
         let cipher = AesGcmCipher::new(CipherSuite::Aes256Gcm);
         let key = AesKey::generate(CipherSuite::Aes256Gcm).unwrap();
-        
+
         let mut nonces = std::collections::HashSet::new();
-        
+
         for _ in 0..num_encryptions {
             let (nonce, _) = cipher.encrypt(&key, &data, None).unwrap();
-            
+
             // All nonces should be unique
             prop_assert!(nonces.insert(nonce), "Duplicate nonce detected");
         }
-        
+
         prop_assert_eq!(nonces.len(), num_encryptions);
     }
 }
@@ -339,15 +339,15 @@ proptest! {
     ) {
         let cipher = AesGcmCipher::new(CipherSuite::Aes256Gcm);
         let key = AesKey::generate(CipherSuite::Aes256Gcm).unwrap();
-        
+
         let (nonce, ciphertext) = cipher.encrypt(&key, &data, None).unwrap();
-        
+
         // Nonce length invariant
         prop_assert_eq!(nonce.len(), 12);
-        
+
         // Ciphertext length invariant (plaintext + 16-byte auth tag)
         prop_assert_eq!(ciphertext.len(), data.len() + 16);
-        
+
         // Decryption should preserve original length
         let decrypted = cipher.decrypt(&key, &nonce, &ciphertext, None).unwrap();
         prop_assert_eq!(decrypted.len(), data.len());
@@ -364,34 +364,34 @@ proptest! {
             .cipher_suite(CipherSuite::Aes128Gcm)
             .build()
             .unwrap();
-            
+
         let config2 = Config::builder()
             .cipher_suite(CipherSuite::Aes256Gcm)
             .build()
             .unwrap();
-        
+
         let cipher1 = AesGcmCipher::new(config1.cipher_suite);
         let cipher2 = AesGcmCipher::new(config2.cipher_suite);
-        
+
         let key1 = AesKey::generate(config1.cipher_suite).unwrap();
         let key2 = AesKey::generate(config2.cipher_suite).unwrap();
-        
+
         // Different key sizes
         prop_assert_eq!(key1.as_bytes().len(), 16);
         prop_assert_eq!(key2.as_bytes().len(), 32);
-        
+
         // Both should work correctly
         let (nonce1, ciphertext1) = cipher1.encrypt(&key1, &data, None).unwrap();
         let (nonce2, ciphertext2) = cipher2.encrypt(&key2, &data, None).unwrap();
-        
+
         let decrypted1 = cipher1.decrypt(&key1, &nonce1, &ciphertext1, None).unwrap();
         let decrypted2 = cipher2.decrypt(&key2, &nonce2, &ciphertext2, None).unwrap();
-        
-        prop_assert_eq!(decrypted1, data);
+
+        prop_assert_eq!(decrypted1, data.clone());
         prop_assert_eq!(decrypted2, data);
-        
+
         // Ciphertexts should be different (different keys and potentially different algorithms)
-        prop_assert_ne!(ciphertext1, ciphertext2);
+        prop_assert_ne!(&ciphertext1, &ciphertext2);
     }
 }
 
@@ -406,13 +406,13 @@ proptest! {
     ) {
         let cipher = AesGcmCipher::new(cipher_suite);
         let key = AesKey::generate(cipher_suite).unwrap();
-        
+
         // Test empty data
         let (nonce, ciphertext) = cipher.encrypt(&key, &[], None).unwrap();
         let decrypted = cipher.decrypt(&key, &nonce, &ciphertext, None).unwrap();
         prop_assert_eq!(decrypted, Vec::<u8>::new());
         prop_assert_eq!(ciphertext.len(), 16); // Just the auth tag
-        
+
         // Test single byte
         let single_byte = vec![0x42];
         let (nonce, ciphertext) = cipher.encrypt(&key, &single_byte, None).unwrap();

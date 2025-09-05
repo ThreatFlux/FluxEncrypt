@@ -68,3 +68,15 @@ required-features = ["serde"]
 [[bench]]
 name = "encryption_benchmarks"
 harness = false
+
+[[test]]
+name = "integration_test"
+path = "../tests/integration_test.rs"
+
+[[test]]
+name = "property_tests"
+path = "../tests/property_tests.rs"
+
+[[test]]
+name = "e2e_test"
+path = "../tests/e2e/cli_e2e.rs"
