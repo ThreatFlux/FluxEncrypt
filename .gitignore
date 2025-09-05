@@ -98,9 +98,17 @@ logs/
 # Keys (for security - never commit real keys)
 *.private
 *.secret
-keys/
-# Keep example keys
+# Ignore key files but allow source code in keys/ module
+*.key
+*.pem
+*.der
+*.p12
+*.pfx
+test_keys/
+generated_keys/
+# Keep example keys and source code
 !examples/test_keys/
+!fluxencrypt/src/keys/
 
 # Docker
 .dockerignore
