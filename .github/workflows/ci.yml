@@ -157,11 +157,17 @@ jobs:
           target
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
     - name: Run benchmarks
-      run: cargo bench --workspace
+      run: cargo bench --bench encryption_benchmarks -- --output-format bencher 2>/dev/null | tee benchmark_output.txt
+    - name: Verify benchmark results
+      run: |
+        echo "Checking benchmark output:"
+        head -20 benchmark_output.txt
+        echo "File size:"
+        wc -l benchmark_output.txt
     - name: Store benchmark result
       uses: benchmark-action/github-action-benchmark@v1
       with:
         tool: 'cargo'
-        output-file-path: target/criterion/*/base/estimates.json
+        output-file-path: benchmark_output.txt
         github-token: ${{ secrets.GITHUB_TOKEN }}
         auto-push: true
