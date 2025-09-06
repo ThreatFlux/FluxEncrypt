@@ -61,7 +61,7 @@ pub enum RsaKeySize {
 
 impl Default for RsaKeySize {
     fn default() -> Self {
-        Self::Rsa2048
+        Self::Rsa4096
     }
 }
 
@@ -268,7 +268,7 @@ mod tests {
         let config = Config::default();
         assert!(config.validate().is_ok());
         assert_eq!(config.cipher_suite, CipherSuite::Aes256Gcm);
-        assert_eq!(config.rsa_key_size, RsaKeySize::Rsa2048);
+        assert_eq!(config.rsa_key_size, RsaKeySize::Rsa4096);
         assert_eq!(config.memory_limit_mb, 256);
     }
 

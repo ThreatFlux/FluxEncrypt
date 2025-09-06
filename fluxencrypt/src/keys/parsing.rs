@@ -5,7 +5,8 @@
 
 use crate::error::{FluxError, Result};
 use crate::keys::{PrivateKey, PublicKey};
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use rsa::pkcs8::{DecodePrivateKey, DecodePublicKey};
+use rsa::{RsaPrivateKey, RsaPublicKey};
 
 /// Key format enumeration
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,7 +44,7 @@ impl KeyParser {
             KeyFormat::Pem => self.parse_public_key_pem(data),
             KeyFormat::Der => self.parse_public_key_der(data),
             KeyFormat::Pkcs8 => self.parse_public_key_pkcs8(data),
-            KeyFormat::Ssh => self.parse_public_key_ssh(data),
+            KeyFormat::Ssh => Err(FluxError::invalid_input("SSH format not yet supported")),
         }
     }
 
@@ -73,97 +74,60 @@ impl KeyParser {
             return Some(KeyFormat::Pem);
         }
 
-        // Check for SSH format (starts with ssh-rsa, ssh-ed25519, etc.)
-        if let Ok(data_str) = std::str::from_utf8(data) {
-            if data_str.starts_with("ssh-rsa") || data_str.starts_with("ssh-ed25519") {
-                return Some(KeyFormat::Ssh);
-            }
-        }
-
-        // Assume DER for binary data
+        // For binary data, assume DER/PKCS8
+        // More sophisticated detection would examine the ASN.1 structure
         Some(KeyFormat::Der)
     }
 
-    /// Parse a public key from PEM format
+    /// Parse a public key from PEM format (try PKCS1 first, then PKCS8)
     fn parse_public_key_pem(&self, data: &[u8]) -> Result<PublicKey> {
         let pem_str = std::str::from_utf8(data)
             .map_err(|_| FluxError::invalid_input("Invalid UTF-8 in PEM data"))?;
 
-        // Extract base64 content between PEM headers
-        let lines: Vec<&str> = pem_str.lines().collect();
-        let mut base64_lines = Vec::new();
-        let mut in_key = false;
+        // Try PKCS1 format first (RSA PUBLIC KEY header)
+        use rsa::pkcs1::DecodeRsaPublicKey;
+        let rsa_public_key = RsaPublicKey::from_pkcs1_pem(pem_str)
+            .or_else(|_| {
+                // Fallback to PKCS8 format (PUBLIC KEY header)
+                use rsa::pkcs8::DecodePublicKey;
+                RsaPublicKey::from_public_key_pem(pem_str)
+            })
+            .map_err(|e| FluxError::crypto(format!("Failed to parse PEM public key: {}", e)))?;
 
-        for line in lines {
-            if line.starts_with("-----BEGIN") {
-                in_key = true;
-            } else if line.starts_with("-----END") {
-                break;
-            } else if in_key && !line.trim().is_empty() {
-                base64_lines.push(line.trim());
-            }
-        }
-
-        if base64_lines.is_empty() {
-            return Err(FluxError::invalid_input("No valid PEM content found"));
-        }
-
-        let base64_content = base64_lines.join("");
-        let der_data = BASE64
-            .decode(&base64_content)
-            .map_err(|_| FluxError::invalid_input("Invalid base64 in PEM"))?;
-
-        // For demonstration, create a key with the decoded data as modulus
-        // In a real implementation, you would parse the ASN.1 structure
-        let key_size = der_data.len() * 8; // Approximate
-        let public_exponent = vec![0x01, 0x00, 0x01]; // Standard e = 65537
-
-        Ok(PublicKey::new(key_size, der_data, public_exponent))
+        Ok(PublicKey::new(rsa_public_key))
     }
 
-    /// Parse a public key from DER format
+    /// Parse a public key from DER format (try PKCS1 first, then PKCS8)
     fn parse_public_key_der(&self, data: &[u8]) -> Result<PublicKey> {
-        // For demonstration, treat the data as the modulus
-        // In a real implementation, you would parse the ASN.1 DER structure
-        let key_size = data.len() * 8;
-        let public_exponent = vec![0x01, 0x00, 0x01]; // Standard e = 65537
+        // Try PKCS1 format first
+        use rsa::pkcs1::DecodeRsaPublicKey;
+        let rsa_public_key = RsaPublicKey::from_pkcs1_der(data)
+            .or_else(|_| {
+                // Fallback to PKCS8 format
+                use rsa::pkcs8::DecodePublicKey;
+                RsaPublicKey::from_public_key_der(data)
+            })
+            .map_err(|e| FluxError::crypto(format!("Failed to parse DER public key: {}", e)))?;
 
-        Ok(PublicKey::new(key_size, data.to_vec(), public_exponent))
+        Ok(PublicKey::new(rsa_public_key))
     }
 
     /// Parse a public key from PKCS#8 format
     fn parse_public_key_pkcs8(&self, data: &[u8]) -> Result<PublicKey> {
-        // For demonstration, delegate to DER parsing
-        // In a real implementation, you would handle the PKCS#8 wrapper
-        self.parse_public_key_der(data)
-    }
+        // Try DER first, then PEM if that fails
+        match RsaPublicKey::from_public_key_der(data) {
+            Ok(key) => Ok(PublicKey::new(key)),
+            Err(_) => {
+                let pem_str = std::str::from_utf8(data)
+                    .map_err(|_| FluxError::invalid_input("Invalid UTF-8 in PKCS#8 data"))?;
 
-    /// Parse a public key from SSH format
-    fn parse_public_key_ssh(&self, data: &[u8]) -> Result<PublicKey> {
-        let ssh_str = std::str::from_utf8(data)
-            .map_err(|_| FluxError::invalid_input("Invalid UTF-8 in SSH key data"))?;
+                let rsa_public_key = RsaPublicKey::from_public_key_pem(pem_str).map_err(|e| {
+                    FluxError::crypto(format!("Failed to parse PKCS#8 public key: {}", e))
+                })?;
 
-        // SSH key format: "ssh-rsa AAAAB3NzaC1yc2E... comment"
-        let parts: Vec<&str> = ssh_str.split_whitespace().collect();
-
-        if parts.len() < 2 {
-            return Err(FluxError::invalid_input("Invalid SSH key format"));
+                Ok(PublicKey::new(rsa_public_key))
+            }
         }
-
-        if parts[0] != "ssh-rsa" {
-            return Err(FluxError::invalid_input("Only ssh-rsa keys are supported"));
-        }
-
-        let key_data = BASE64
-            .decode(parts[1])
-            .map_err(|_| FluxError::invalid_input("Invalid base64 in SSH key"))?;
-
-        // For demonstration, use the decoded data as modulus
-        // In a real implementation, you would parse the SSH wire format
-        let key_size = key_data.len() * 8;
-        let public_exponent = vec![0x01, 0x00, 0x01];
-
-        Ok(PublicKey::new(key_size, key_data, public_exponent))
     }
 
     /// Parse a private key from PEM format
@@ -171,77 +135,46 @@ impl KeyParser {
         let pem_str = std::str::from_utf8(data)
             .map_err(|_| FluxError::invalid_input("Invalid UTF-8 in PEM data"))?;
 
-        // Extract base64 content between PEM headers
-        let lines: Vec<&str> = pem_str.lines().collect();
-        let mut base64_lines = Vec::new();
-        let mut in_key = false;
+        let rsa_private_key = RsaPrivateKey::from_pkcs8_pem(pem_str)
+            .or_else(|_| {
+                // Try PKCS#1 format as fallback
+                use rsa::pkcs1::DecodeRsaPrivateKey;
+                RsaPrivateKey::from_pkcs1_pem(pem_str)
+            })
+            .map_err(|e| FluxError::crypto(format!("Failed to parse PEM private key: {}", e)))?;
 
-        for line in lines {
-            if line.starts_with("-----BEGIN") {
-                in_key = true;
-            } else if line.starts_with("-----END") {
-                break;
-            } else if in_key && !line.trim().is_empty() {
-                base64_lines.push(line.trim());
-            }
-        }
-
-        if base64_lines.is_empty() {
-            return Err(FluxError::invalid_input("No valid PEM content found"));
-        }
-
-        let base64_content = base64_lines.join("");
-        let der_data = BASE64
-            .decode(&base64_content)
-            .map_err(|_| FluxError::invalid_input("Invalid base64 in PEM"))?;
-
-        // For demonstration, create placeholder key components
-        // In a real implementation, you would parse the ASN.1 structure
-        let key_size = der_data.len() * 8; // Approximate
-        let modulus = der_data.clone();
-        let private_exponent = der_data.clone();
-        let prime_len = der_data.len() / 2;
-        let prime1 = der_data[..prime_len].to_vec();
-        let prime2 = der_data[prime_len..].to_vec();
-        let crt_coefficient = vec![1u8; prime_len];
-
-        Ok(PrivateKey::new(
-            key_size,
-            modulus,
-            private_exponent,
-            prime1,
-            prime2,
-            crt_coefficient,
-        ))
+        Ok(PrivateKey::new(rsa_private_key))
     }
 
     /// Parse a private key from DER format
     fn parse_private_key_der(&self, data: &[u8]) -> Result<PrivateKey> {
-        // For demonstration, create placeholder key components
-        // In a real implementation, you would parse the ASN.1 DER structure
-        let key_size = data.len() * 8;
-        let modulus = data.to_vec();
-        let private_exponent = data.to_vec();
-        let prime_len = data.len() / 2;
-        let prime1 = data[..prime_len].to_vec();
-        let prime2 = data[prime_len..].to_vec();
-        let crt_coefficient = vec![1u8; prime_len];
+        let rsa_private_key = RsaPrivateKey::from_pkcs8_der(data)
+            .or_else(|_| {
+                // Try PKCS#1 format as fallback
+                use rsa::pkcs1::DecodeRsaPrivateKey;
+                RsaPrivateKey::from_pkcs1_der(data)
+            })
+            .map_err(|e| FluxError::crypto(format!("Failed to parse DER private key: {}", e)))?;
 
-        Ok(PrivateKey::new(
-            key_size,
-            modulus,
-            private_exponent,
-            prime1,
-            prime2,
-            crt_coefficient,
-        ))
+        Ok(PrivateKey::new(rsa_private_key))
     }
 
     /// Parse a private key from PKCS#8 format
     fn parse_private_key_pkcs8(&self, data: &[u8]) -> Result<PrivateKey> {
-        // For demonstration, delegate to DER parsing
-        // In a real implementation, you would handle the PKCS#8 wrapper
-        self.parse_private_key_der(data)
+        // Try DER first, then PEM if that fails
+        match RsaPrivateKey::from_pkcs8_der(data) {
+            Ok(key) => Ok(PrivateKey::new(key)),
+            Err(_) => {
+                let pem_str = std::str::from_utf8(data)
+                    .map_err(|_| FluxError::invalid_input("Invalid UTF-8 in PKCS#8 data"))?;
+
+                let rsa_private_key = RsaPrivateKey::from_pkcs8_pem(pem_str).map_err(|e| {
+                    FluxError::crypto(format!("Failed to parse PKCS#8 private key: {}", e))
+                })?;
+
+                Ok(PrivateKey::new(rsa_private_key))
+            }
+        }
     }
 }
 
@@ -251,65 +184,118 @@ impl Default for KeyParser {
     }
 }
 
-/// Convenience function to parse a public key from a string
-pub fn parse_public_key_from_str(key_str: &str) -> Result<PublicKey> {
+/// Convenience function to parse a public key from a PEM string
+pub fn parse_public_key_from_str(pem_str: &str) -> Result<PublicKey> {
     let parser = KeyParser::new();
-    let data = key_str.as_bytes();
-
-    let format = parser
-        .detect_format(data)
-        .ok_or_else(|| FluxError::invalid_input("Unable to detect key format"))?;
-
-    parser.parse_public_key(data, format)
+    parser.parse_public_key(pem_str.as_bytes(), KeyFormat::Pem)
 }
 
-/// Convenience function to parse a private key from a string
-pub fn parse_private_key_from_str(key_str: &str) -> Result<PrivateKey> {
+/// Convenience function to parse a private key from a PEM string
+pub fn parse_private_key_from_str(pem_str: &str) -> Result<PrivateKey> {
     let parser = KeyParser::new();
-    let data = key_str.as_bytes();
+    parser.parse_private_key(pem_str.as_bytes(), KeyFormat::Pem)
+}
 
-    let format = parser
-        .detect_format(data)
-        .ok_or_else(|| FluxError::invalid_input("Unable to detect key format"))?;
+/// Convenience function to parse an encrypted private key from a PEM string
+pub fn parse_encrypted_private_key_from_str(pem_str: &str, password: &str) -> Result<PrivateKey> {
+    use pkcs8::DecodePrivateKey;
 
-    parser.parse_private_key(data, format)
+    // Parse the encrypted private key PEM and decrypt it
+    let rsa_private_key = RsaPrivateKey::from_pkcs8_encrypted_pem(pem_str, password)
+        .map_err(|e| FluxError::crypto(format!("Failed to parse encrypted private key: {}", e)))?;
+
+    Ok(PrivateKey::new(rsa_private_key))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::keys::KeyPair;
 
     #[test]
     fn test_format_detection() {
         let parser = KeyParser::new();
 
         // Test PEM detection
-        let pem_data = b"-----BEGIN RSA PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A...\n-----END RSA PUBLIC KEY-----";
+        let pem_data = b"-----BEGIN PUBLIC KEY-----\ntest\n-----END PUBLIC KEY-----";
         assert_eq!(parser.detect_format(pem_data), Some(KeyFormat::Pem));
 
-        // Test SSH detection
-        let ssh_data = b"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ... user@host";
-        assert_eq!(parser.detect_format(ssh_data), Some(KeyFormat::Ssh));
-
-        // Test binary data (assumes DER) - use actual binary data that can't be UTF-8
-        let binary_data = b"\x30\x82\x01\x22\x30\x0d\x06\x09\xff\x86";
-        assert_eq!(parser.detect_format(binary_data), Some(KeyFormat::Der));
+        // Test DER detection (binary data)
+        let der_data = b"\x30\x82\x01\x22";
+        assert_eq!(parser.detect_format(der_data), Some(KeyFormat::Der));
     }
 
     #[test]
-    fn test_pem_parsing_basic() {
+    fn test_roundtrip_with_generated_keys() {
+        let keypair = KeyPair::generate(2048).unwrap();
         let parser = KeyParser::new();
-        // Simple PEM with base64 encoded data "test" -> "dGVzdA=="
-        let pem_data = b"-----BEGIN RSA PUBLIC KEY-----\ndGVzdA==\n-----END RSA PUBLIC KEY-----";
-        let result = parser.parse_public_key(pem_data, KeyFormat::Pem);
-        assert!(result.is_ok());
+
+        // Test public key PEM roundtrip
+        let public_pem = keypair.public_key().to_pem().unwrap();
+        let parsed_public = parser
+            .parse_public_key(public_pem.as_bytes(), KeyFormat::Pem)
+            .unwrap();
+        assert_eq!(parsed_public.modulus(), keypair.public_key().modulus());
+
+        // Test private key PEM roundtrip
+        let private_pem = keypair.private_key().to_pem().unwrap();
+        let parsed_private = parser
+            .parse_private_key(private_pem.as_bytes(), KeyFormat::Pem)
+            .unwrap();
+        assert_eq!(parsed_private.modulus(), keypair.private_key().modulus());
+
+        // Test public key DER roundtrip
+        let public_der = keypair.public_key().to_der().unwrap();
+        let parsed_public_der = parser
+            .parse_public_key(&public_der, KeyFormat::Der)
+            .unwrap();
+        assert_eq!(parsed_public_der.modulus(), keypair.public_key().modulus());
+
+        // Test private key DER roundtrip
+        let private_der = keypair.private_key().to_der().unwrap();
+        let parsed_private_der = parser
+            .parse_private_key(&private_der, KeyFormat::Der)
+            .unwrap();
+        assert_eq!(
+            parsed_private_der.modulus(),
+            keypair.private_key().modulus()
+        );
     }
 
     #[test]
-    fn test_der_parsing_basic() {
+    fn test_invalid_data() {
         let parser = KeyParser::new();
-        let der_data = b"\x30\x82\x01\x22\x30\x0d";
-        let result = parser.parse_public_key(der_data, KeyFormat::Der);
-        assert!(result.is_ok());
+
+        // Test invalid PEM
+        let invalid_pem = b"not a pem key";
+        assert!(parser
+            .parse_public_key(invalid_pem, KeyFormat::Pem)
+            .is_err());
+
+        // Test invalid DER
+        let invalid_der = b"not der data";
+        assert!(parser
+            .parse_public_key(invalid_der, KeyFormat::Der)
+            .is_err());
+    }
+
+    #[test]
+    fn test_ssh_format_not_supported() {
+        let parser = KeyParser::new();
+        let dummy_data = b"ssh-rsa ...";
+
+        assert!(parser.parse_public_key(dummy_data, KeyFormat::Ssh).is_err());
+        assert!(parser
+            .parse_private_key(dummy_data, KeyFormat::Ssh)
+            .is_err());
+    }
+
+    #[test]
+    fn test_parser_creation() {
+        let parser1 = KeyParser::new();
+        let parser2 = KeyParser;
+
+        assert!(format!("{:?}", parser1).contains("KeyParser"));
+        assert!(format!("{:?}", parser2).contains("KeyParser"));
     }
 }

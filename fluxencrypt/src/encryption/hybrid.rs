@@ -32,12 +32,22 @@ impl HybridCipher {
     ///
     /// # Arguments
     /// * `public_key` - The RSA public key to encrypt the AES key with
-    /// * `plaintext` - The data to encrypt
+    /// * `plaintext` - The data to encrypt (max 512KB for blob encryption)
     ///
     /// # Returns
-    /// The encrypted data as a byte vector containing the encrypted AES key,
-    /// nonce, and ciphertext.
+    /// The encrypted data as a byte vector in format:
+    /// [encrypted_session_key(512 bytes)][nonce(12 bytes)][ciphertext+tag]
     pub fn encrypt(&self, public_key: &PublicKey, plaintext: &[u8]) -> Result<Vec<u8>> {
+        // Check size limit: 512KB maximum for blob encryption
+        const MAX_BLOB_SIZE: usize = 512 * 1024; // 512KB
+        if plaintext.len() > MAX_BLOB_SIZE {
+            return Err(FluxError::invalid_input(format!(
+                "Data too large for blob encryption: {} bytes exceeds {} KB limit",
+                plaintext.len(),
+                MAX_BLOB_SIZE / 1024
+            )));
+        }
+
         // 1. Generate random AES key
         let aes_key = AesKey::generate(self.config.cipher_suite)?;
 
@@ -49,20 +59,32 @@ impl HybridCipher {
         let rsa_cipher = RsaOaepCipher::new();
         let encrypted_aes_key = rsa_cipher.encrypt(public_key, aes_key.as_bytes())?;
 
-        // 4. Combine encrypted key, nonce, and ciphertext
-        // Format: [encrypted_key_length(4)] [encrypted_key] [nonce_length(4)] [nonce] [ciphertext]
-        let mut result = Vec::new();
+        // 4. Validate encrypted key size (should match RSA key size in bytes)
+        let expected_key_size = public_key.key_size_bits() / 8;
+        if encrypted_aes_key.len() != expected_key_size {
+            return Err(FluxError::crypto(format!(
+                "Unexpected encrypted key size: {} bytes, expected {} bytes for {}-bit RSA",
+                encrypted_aes_key.len(),
+                expected_key_size,
+                public_key.key_size_bits()
+            )));
+        }
 
-        // Encrypted AES key length and data
-        result.extend_from_slice(&(encrypted_aes_key.len() as u32).to_be_bytes());
-        result.extend_from_slice(&encrypted_aes_key);
+        // 5. Validate nonce size (should be 12 bytes for GCM)
+        if nonce.len() != 12 {
+            return Err(FluxError::crypto(format!(
+                "Unexpected nonce size: {} bytes, expected 12 bytes for GCM",
+                nonce.len()
+            )));
+        }
 
-        // Nonce length and data
-        result.extend_from_slice(&(nonce.len() as u32).to_be_bytes());
-        result.extend_from_slice(&nonce);
+        // 6. Combine data in format:
+        // [encrypted_session_key(key_size bytes)][nonce(12 bytes)][ciphertext+tag]
+        let mut result = Vec::with_capacity(encrypted_aes_key.len() + 12 + aes_ciphertext.len());
 
-        // AES ciphertext
-        result.extend_from_slice(&aes_ciphertext);
+        result.extend_from_slice(&encrypted_aes_key); // key_size bytes
+        result.extend_from_slice(&nonce); // 12 bytes
+        result.extend_from_slice(&aes_ciphertext); // ciphertext + 16-byte tag
 
         Ok(result)
     }
@@ -71,62 +93,35 @@ impl HybridCipher {
     ///
     /// # Arguments
     /// * `private_key` - The RSA private key to decrypt the AES key with
-    /// * `ciphertext` - The encrypted data
+    /// * `ciphertext` - The encrypted data in format: [encrypted_session_key(key_size)][nonce(12)][ciphertext+tag]
     ///
     /// # Returns
     /// The decrypted data as a byte vector.
     pub fn decrypt(&self, private_key: &PrivateKey, ciphertext: &[u8]) -> Result<Vec<u8>> {
-        if ciphertext.len() < 8 {
-            return Err(FluxError::invalid_input("Ciphertext too short"));
+        // Calculate the expected encrypted key size based on RSA key size
+        let encrypted_key_size = private_key.key_size_bits() / 8;
+
+        // Minimum size check: encrypted_key_size + 12 (nonce) + 16 (GCM tag)
+        let min_size = encrypted_key_size + 12 + 16;
+        if ciphertext.len() < min_size {
+            return Err(FluxError::invalid_input(format!(
+                "Ciphertext too short: {} bytes, minimum {} bytes required",
+                ciphertext.len(),
+                min_size
+            )));
         }
 
-        let mut offset = 0;
+        // Parse format: [encrypted_session_key(key_size)][nonce(12)][ciphertext+tag]
+        let encrypted_aes_key = &ciphertext[0..encrypted_key_size];
+        let nonce = &ciphertext[encrypted_key_size..encrypted_key_size + 12];
+        let aes_ciphertext = &ciphertext[encrypted_key_size + 12..];
 
-        // 1. Extract encrypted AES key
-        let encrypted_key_len = u32::from_be_bytes([
-            ciphertext[offset],
-            ciphertext[offset + 1],
-            ciphertext[offset + 2],
-            ciphertext[offset + 3],
-        ]) as usize;
-        offset += 4;
-
-        if offset + encrypted_key_len > ciphertext.len() {
-            return Err(FluxError::invalid_input("Invalid encrypted key length"));
-        }
-
-        let encrypted_aes_key = &ciphertext[offset..offset + encrypted_key_len];
-        offset += encrypted_key_len;
-
-        // Extract nonce
-        if offset + 4 > ciphertext.len() {
-            return Err(FluxError::invalid_input("Invalid nonce length field"));
-        }
-
-        let nonce_len = u32::from_be_bytes([
-            ciphertext[offset],
-            ciphertext[offset + 1],
-            ciphertext[offset + 2],
-            ciphertext[offset + 3],
-        ]) as usize;
-        offset += 4;
-
-        if offset + nonce_len > ciphertext.len() {
-            return Err(FluxError::invalid_input("Invalid nonce length"));
-        }
-
-        let nonce = &ciphertext[offset..offset + nonce_len];
-        offset += nonce_len;
-
-        // Extract AES ciphertext
-        let aes_ciphertext = &ciphertext[offset..];
-
-        // 2. Decrypt AES key with RSA-OAEP
+        // 1. Decrypt AES key with RSA-OAEP
         let rsa_cipher = RsaOaepCipher::new();
         let aes_key_bytes = rsa_cipher.decrypt(private_key, encrypted_aes_key)?;
         let aes_key = AesKey::new(aes_key_bytes);
 
-        // 3. Decrypt ciphertext with AES-GCM
+        // 2. Decrypt ciphertext with AES-GCM
         let aes_cipher = AesGcmCipher::new(self.config.cipher_suite);
         let plaintext = aes_cipher.decrypt(&aes_key, nonce, aes_ciphertext, None)?;
 
@@ -193,7 +188,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Skip this test as it uses placeholder RSA implementation
     fn test_encrypt_decrypt() {
         let keypair = KeyPair::generate(2048).unwrap();
         let cipher = HybridCipher::default();
@@ -210,7 +204,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Skip this test as it uses placeholder RSA implementation
     fn test_encrypt_decrypt_empty_data() {
         let keypair = KeyPair::generate(2048).unwrap();
         let cipher = HybridCipher::default();
@@ -222,7 +215,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Skip this test as it uses placeholder RSA implementation
     fn test_large_data_encryption() {
         let keypair = KeyPair::generate(2048).unwrap();
         let cipher = HybridCipher::default();
@@ -235,11 +227,10 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Skip this test as it uses placeholder RSA implementation
     fn test_very_large_data_encryption() {
         let keypair = KeyPair::generate(2048).unwrap();
         let cipher = HybridCipher::default();
-        let plaintext = vec![0x42u8; 1_000_000]; // 1MB of data
+        let plaintext = vec![0x42u8; 512 * 1024]; // 512KB of data (at the limit)
 
         let ciphertext = cipher.encrypt(keypair.public_key(), &plaintext).unwrap();
         let decrypted = cipher.decrypt(keypair.private_key(), &ciphertext).unwrap();
@@ -248,7 +239,20 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Skip this test as it uses placeholder RSA implementation
+    fn test_data_size_limit_exceeded() {
+        let keypair = KeyPair::generate(2048).unwrap();
+        let cipher = HybridCipher::default();
+        let plaintext = vec![0x42u8; 512 * 1024 + 1]; // 512KB + 1 byte (exceeds limit)
+
+        let result = cipher.encrypt(keypair.public_key(), &plaintext);
+        assert!(result.is_err());
+
+        if let Err(e) = result {
+            assert!(e.to_string().contains("Data too large for blob encryption"));
+        }
+    }
+
+    #[test]
     fn test_different_cipher_suites() {
         let keypair = KeyPair::generate(2048).unwrap();
         let plaintext = b"Test data for different cipher suites";
@@ -269,7 +273,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Skip this test as it uses placeholder RSA implementation
     fn test_different_key_sizes() {
         let plaintext = b"Test data for different key sizes";
 
@@ -289,8 +292,8 @@ mod tests {
         let keypair = KeyPair::generate(2048).unwrap();
         let cipher = HybridCipher::default();
 
-        // Test with ciphertext too short (less than 8 bytes for length fields)
-        for len in 0..8 {
+        // Test with ciphertext too short (less than minimum required: 256+12+16=284 bytes for 2048-bit RSA)
+        for len in 0..284 {
             let short_ciphertext = vec![0u8; len];
             let result = cipher.decrypt(keypair.private_key(), &short_ciphertext);
             assert!(result.is_err(), "Should fail with length {}", len);
@@ -302,63 +305,24 @@ mod tests {
     }
 
     #[test]
-    fn test_decrypt_invalid_encrypted_key_length() {
+    fn test_decrypt_invalid_encrypted_key_data() {
         let keypair = KeyPair::generate(2048).unwrap();
         let cipher = HybridCipher::default();
 
-        // Create a ciphertext with invalid encrypted key length
-        let mut invalid_ciphertext = Vec::new();
-        invalid_ciphertext.extend_from_slice(&(1000u32).to_be_bytes()); // Too large key length
-        invalid_ciphertext.resize(12, 0); // Not enough data
+        // Create a ciphertext with valid length but invalid encrypted key data
+        let encrypted_key_size = keypair.private_key().key_size_bits() / 8;
+        let invalid_ciphertext = vec![0u8; encrypted_key_size + 12 + 16];
+        // Fill with invalid data that will fail RSA decryption
 
         let result = cipher.decrypt(keypair.private_key(), &invalid_ciphertext);
         assert!(result.is_err());
 
         if let Err(e) = result {
-            assert!(e.to_string().contains("Invalid encrypted key length"));
+            assert!(e.to_string().contains("RSA decryption failed"));
         }
     }
 
     #[test]
-    fn test_decrypt_invalid_nonce_length_field() {
-        let keypair = KeyPair::generate(2048).unwrap();
-        let cipher = HybridCipher::default();
-
-        // Create a ciphertext with valid encrypted key length but invalid nonce length field
-        let mut invalid_ciphertext = Vec::new();
-        invalid_ciphertext.extend_from_slice(&(256u32).to_be_bytes()); // Valid RSA key length
-        invalid_ciphertext.resize(256 + 4 + 2, 0); // RSA data + length + partial nonce length
-
-        let result = cipher.decrypt(keypair.private_key(), &invalid_ciphertext);
-        assert!(result.is_err());
-
-        if let Err(e) = result {
-            assert!(e.to_string().contains("Invalid nonce length field"));
-        }
-    }
-
-    #[test]
-    fn test_decrypt_invalid_nonce_length() {
-        let keypair = KeyPair::generate(2048).unwrap();
-        let cipher = HybridCipher::default();
-
-        // Create a ciphertext with valid encrypted key but invalid nonce length
-        let mut invalid_ciphertext = Vec::new();
-        invalid_ciphertext.extend_from_slice(&(256u32).to_be_bytes()); // Valid RSA key length
-        invalid_ciphertext.resize(256 + 4, 0); // RSA data + length
-        invalid_ciphertext.extend_from_slice(&(1000u32).to_be_bytes()); // Too large nonce length
-        invalid_ciphertext.resize(256 + 4 + 4 + 10, 0); // Not enough data
-
-        let result = cipher.decrypt(keypair.private_key(), &invalid_ciphertext);
-        assert!(result.is_err());
-
-        if let Err(e) = result {
-            assert!(e.to_string().contains("Invalid nonce length"));
-        }
-    }
-
-    #[test]
-    #[ignore] // Skip this test as it uses placeholder RSA implementation
     fn test_ciphertext_format_integrity() {
         let keypair = KeyPair::generate(2048).unwrap();
         let cipher = HybridCipher::default();
@@ -366,52 +330,35 @@ mod tests {
 
         let ciphertext = cipher.encrypt(keypair.public_key(), plaintext).unwrap();
 
-        // Verify ciphertext format: [encrypted_key_len][encrypted_key][nonce_len][nonce][aes_ciphertext]
+        // Verify ciphertext format: [encrypted_key][nonce][aes_ciphertext]
+        let encrypted_key_size = keypair.public_key().key_size_bits() / 8; // 256 bytes for 2048-bit RSA
+        let nonce_size = 12; // GCM nonce size
+        let tag_size = 16; // GCM tag size
+
+        let expected_min_size = encrypted_key_size + nonce_size + tag_size;
         assert!(
-            ciphertext.len() >= 8,
-            "Ciphertext should have at least length fields"
+            ciphertext.len() >= expected_min_size,
+            "Ciphertext should have at least {} bytes, got {}",
+            expected_min_size,
+            ciphertext.len()
         );
 
-        let mut offset = 0;
-
-        // Check encrypted key length
-        let encrypted_key_len = u32::from_be_bytes([
-            ciphertext[offset],
-            ciphertext[offset + 1],
-            ciphertext[offset + 2],
-            ciphertext[offset + 3],
-        ]) as usize;
-        offset += 4;
-
+        // Verify structure
         assert_eq!(
-            encrypted_key_len, 256,
+            encrypted_key_size, 256,
             "Encrypted key should be 256 bytes for 2048-bit RSA"
         );
-        offset += encrypted_key_len;
 
-        // Check nonce length
-        let nonce_len = u32::from_be_bytes([
-            ciphertext[offset],
-            ciphertext[offset + 1],
-            ciphertext[offset + 2],
-            ciphertext[offset + 3],
-        ]) as usize;
-        offset += 4;
-
-        assert_eq!(nonce_len, 12, "Nonce should be 12 bytes for GCM");
-        offset += nonce_len;
-
-        // Remaining should be AES ciphertext
-        let aes_ciphertext_len = ciphertext.len() - offset;
+        // The remaining should be nonce (12 bytes) + AES ciphertext with tag
+        let aes_data_size = ciphertext.len() - encrypted_key_size;
         assert_eq!(
-            aes_ciphertext_len,
-            plaintext.len() + 16,
-            "AES ciphertext should be plaintext + 16-byte tag"
+            aes_data_size,
+            nonce_size + plaintext.len() + tag_size,
+            "AES data should be nonce + plaintext + tag"
         );
     }
 
     #[test]
-    #[ignore] // Skip this test as it uses placeholder RSA implementation
     fn test_different_plaintexts_produce_different_ciphertexts() {
         let keypair = KeyPair::generate(2048).unwrap();
         let cipher = HybridCipher::default();
@@ -429,7 +376,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Skip this test as it uses placeholder RSA implementation
     fn test_same_plaintext_produces_different_ciphertexts() {
         let keypair = KeyPair::generate(2048).unwrap();
         let cipher = HybridCipher::default();
@@ -453,7 +399,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Skip this test as it uses placeholder RSA implementation
     fn test_tampered_ciphertext_detection() {
         let keypair = KeyPair::generate(2048).unwrap();
         let cipher = HybridCipher::default();
@@ -462,31 +407,29 @@ mod tests {
         let ciphertext = cipher.encrypt(keypair.public_key(), plaintext).unwrap();
 
         // Tamper with various parts of the ciphertext
+        let encrypted_key_size = keypair.public_key().key_size_bits() / 8; // 256 for 2048-bit RSA
         let original_len = ciphertext.len();
 
-        // Tamper with encrypted key length
-        if ciphertext.len() > 4 {
-            let mut tampered = ciphertext.clone();
-            tampered[0] ^= 1;
-            let result = cipher.decrypt(keypair.private_key(), &tampered);
-            assert!(
-                result.is_err(),
-                "Tampering with encrypted key length should be detected"
-            );
-        }
-
-        // Tamper with encrypted key data
+        // Tamper with encrypted key data (first 256 bytes)
         if ciphertext.len() > 10 {
             let mut tampered = ciphertext.clone();
-            tampered[8] ^= 1; // Assuming this is in the encrypted key part
+            tampered[10] ^= 1; // Tamper with encrypted key
             let _result = cipher.decrypt(keypair.private_key(), &tampered);
-            // This might or might not fail depending on RSA implementation
+            // This might or might not fail depending on RSA implementation and where we tamper
+        }
+
+        // Tamper with nonce (bytes 256-268)
+        if ciphertext.len() > encrypted_key_size + 5 {
+            let mut tampered = ciphertext.clone();
+            tampered[encrypted_key_size + 5] ^= 1; // Tamper with nonce
+            let _result = cipher.decrypt(keypair.private_key(), &tampered);
+            // This should fail due to GCM authentication or nonce mismatch
         }
 
         // Tamper with AES ciphertext (should always fail due to GCM authentication)
         if !ciphertext.is_empty() {
             let mut tampered = ciphertext.clone();
-            tampered[original_len - 1] ^= 1; // Tamper with last byte (likely in AES ciphertext)
+            tampered[original_len - 1] ^= 1; // Tamper with last byte (AES ciphertext/tag)
             let _result = cipher.decrypt(keypair.private_key(), &tampered);
             // Should fail due to GCM authentication
         }
@@ -495,7 +438,6 @@ mod tests {
     // Property-based tests
     proptest! {
         #[test]
-        #[ignore] // Skip this test as it uses placeholder RSA implementation
         fn test_encrypt_decrypt_roundtrip(
             data in prop::collection::vec(any::<u8>(), 0..10000)
         ) {
@@ -516,7 +458,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Skip this test as it uses placeholder RSA implementation
     fn test_encrypt_with_different_data_patterns() {
         let keypair = KeyPair::generate(2048).unwrap();
         let cipher = HybridCipher::default();

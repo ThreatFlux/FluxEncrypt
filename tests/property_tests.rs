@@ -102,7 +102,6 @@ proptest! {
 // Test hybrid cipher roundtrip property
 proptest! {
     #[test]
-    #[ignore] // Skip due to placeholder RSA implementation
     fn test_hybrid_cipher_roundtrip_property(
         data in prop::collection::vec(any::<u8>(), 0..100000),
         cipher_suite in prop_oneof![
@@ -199,8 +198,8 @@ proptest! {
         prop_assert!(keypair2.public_key().modulus()[0] & 0x80 != 0);
 
         // Standard public exponent (65537)
-        prop_assert_eq!(keypair1.public_key().public_exponent(), &vec![0x01, 0x00, 0x01]);
-        prop_assert_eq!(keypair2.public_key().public_exponent(), &vec![0x01, 0x00, 0x01]);
+        prop_assert_eq!(keypair1.public_key().public_exponent(), vec![0x01, 0x00, 0x01]);
+        prop_assert_eq!(keypair2.public_key().public_exponent(), vec![0x01, 0x00, 0x01]);
     }
 }
 

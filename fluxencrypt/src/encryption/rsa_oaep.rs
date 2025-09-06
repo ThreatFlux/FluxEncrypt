@@ -5,6 +5,8 @@
 
 use crate::error::{FluxError, Result};
 use crate::keys::{PrivateKey, PublicKey};
+use rsa::Oaep;
+use sha2::Sha512;
 
 /// RSA-OAEP cipher for asymmetric encryption operations
 #[derive(Debug)]
@@ -24,10 +26,6 @@ impl RsaOaepCipher {
     ///
     /// # Returns
     /// The encrypted data
-    ///
-    /// # Note
-    /// This is a simplified implementation for demonstration purposes.
-    /// In production, you would use a proper RSA library like the `rsa` crate.
     pub fn encrypt(&self, public_key: &PublicKey, plaintext: &[u8]) -> Result<Vec<u8>> {
         // Check plaintext size constraints
         let max_plaintext_len = self.max_plaintext_length(public_key)?;
@@ -39,23 +37,17 @@ impl RsaOaepCipher {
             )));
         }
 
-        // For demonstration purposes, we'll simulate RSA-OAEP encryption
-        // In a real implementation, this would involve:
-        // 1. OAEP padding with SHA-256
-        // 2. Modular exponentiation: c = m^e mod n
+        // Create OAEP padding with SHA-512
+        let padding = Oaep::new::<Sha512>();
 
-        let key_size_bytes = public_key.key_size_bits() / 8;
-        let mut result = vec![0u8; key_size_bytes];
+        // Get a random number generator
+        let mut rng = rand::thread_rng();
 
-        // Simple XOR-based placeholder encryption (NOT SECURE!)
-        // This is just to make the code compile and demonstrate the API
-        for (i, &byte) in plaintext.iter().enumerate() {
-            result[i] = byte ^ 0xAB; // Simple XOR for demonstration
-        }
-
-        // The rest should remain as zeros (padding)
-
-        Ok(result)
+        // Encrypt using RSA-OAEP
+        public_key
+            .inner()
+            .encrypt(&mut rng, padding, plaintext)
+            .map_err(|e| FluxError::crypto(format!("RSA encryption failed: {}", e)))
     }
 
     /// Decrypt data with RSA-OAEP
@@ -66,10 +58,6 @@ impl RsaOaepCipher {
     ///
     /// # Returns
     /// The decrypted plaintext
-    ///
-    /// # Note
-    /// This is a simplified implementation for demonstration purposes.
-    /// In production, you would use a proper RSA library like the `rsa` crate.
     pub fn decrypt(&self, private_key: &PrivateKey, ciphertext: &[u8]) -> Result<Vec<u8>> {
         let expected_size = private_key.key_size_bits() / 8;
         if ciphertext.len() != expected_size {
@@ -80,38 +68,26 @@ impl RsaOaepCipher {
             )));
         }
 
-        // For demonstration purposes, we'll simulate RSA-OAEP decryption
-        // In a real implementation, this would involve:
-        // 1. Modular exponentiation: m = c^d mod n
-        // 2. OAEP unpadding with SHA-256
+        // Create OAEP padding with SHA-512
+        let padding = Oaep::new::<Sha512>();
 
-        let mut result = Vec::new();
-
-        // Simple XOR-based placeholder decryption (NOT SECURE!)
-        // This matches the simple encryption above
-        for &byte in ciphertext.iter() {
-            let decrypted_byte = byte ^ 0xAB;
-            if decrypted_byte != 0 {
-                result.push(decrypted_byte);
-            } else {
-                // Stop at first null byte (end of actual data)
-                break;
-            }
-        }
-
-        Ok(result)
+        // Decrypt using RSA-OAEP
+        private_key
+            .inner()
+            .decrypt(padding, ciphertext)
+            .map_err(|e| FluxError::crypto(format!("RSA decryption failed: {}", e)))
     }
 
     /// Calculate the maximum plaintext length for RSA-OAEP encryption
     ///
-    /// For RSA-OAEP with SHA-256, the maximum plaintext length is:
+    /// For RSA-OAEP with SHA-512, the maximum plaintext length is:
     /// key_length_bytes - 2 * hash_length_bytes - 2
-    /// where hash_length_bytes = 32 for SHA-256
+    /// where hash_length_bytes = 64 for SHA-512
     pub fn max_plaintext_length(&self, public_key: &PublicKey) -> Result<usize> {
         let key_size_bytes = public_key.key_size_bits() / 8;
 
-        // For RSA-OAEP with SHA-256: overhead = 2 * 32 + 2 = 66 bytes
-        let oaep_overhead = 66;
+        // For RSA-OAEP with SHA-512: overhead = 2 * 64 + 2 = 130 bytes
+        let oaep_overhead = 130;
 
         if key_size_bytes <= oaep_overhead {
             return Err(FluxError::key("RSA key too small for OAEP encryption"));
@@ -154,8 +130,8 @@ mod tests {
 
         let max_len = cipher.max_plaintext_length(keypair.public_key()).unwrap();
 
-        // For 2048-bit RSA with OAEP-SHA256: 256 - 66 = 190 bytes
-        assert_eq!(max_len, 190);
+        // For 2048-bit RSA with OAEP-SHA512: 256 - 130 = 126 bytes
+        assert_eq!(max_len, 126);
     }
 
     #[test]
@@ -164,7 +140,7 @@ mod tests {
 
         // Test different key sizes
         let key_sizes = [2048, 3072, 4096];
-        let expected_max_lens = [190, 318, 446]; // key_size/8 - 66
+        let expected_max_lens = [126, 254, 382]; // key_size/8 - 130
 
         for (i, &key_size) in key_sizes.iter().enumerate() {
             let keypair = KeyPair::generate(key_size).unwrap();
@@ -207,8 +183,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Skip this test as it uses placeholder RSA implementation
-    fn test_encrypt_decrypt_placeholder() {
+    fn test_encrypt_decrypt() {
         let keypair = KeyPair::generate(2048).unwrap();
         let cipher = RsaOaepCipher::new();
         let plaintext = b"Hello, world!";
@@ -217,13 +192,12 @@ mod tests {
         let ciphertext = cipher.encrypt(keypair.public_key(), plaintext).unwrap();
         assert_eq!(ciphertext.len(), 2048 / 8); // Should be key size in bytes
 
-        // Test that decryption recovers the plaintext (in our placeholder implementation)
+        // Test that decryption recovers the plaintext
         let decrypted = cipher.decrypt(keypair.private_key(), &ciphertext).unwrap();
         assert_eq!(decrypted, plaintext);
     }
 
     #[test]
-    #[ignore] // Skip this test as it uses placeholder RSA implementation
     fn test_encrypt_decrypt_empty_data() {
         let keypair = KeyPair::generate(2048).unwrap();
         let cipher = RsaOaepCipher::new();
@@ -235,7 +209,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Skip this test as it uses placeholder RSA implementation
     fn test_encrypt_decrypt_max_length_data() {
         let keypair = KeyPair::generate(2048).unwrap();
         let cipher = RsaOaepCipher::new();
@@ -284,7 +257,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Skip this test as it uses placeholder RSA implementation
     fn test_encrypt_decrypt_different_key_pairs() {
         let keypair1 = KeyPair::generate(2048).unwrap();
         let _keypair2 = KeyPair::generate(2048).unwrap();
@@ -298,14 +270,15 @@ mod tests {
         let decrypted1 = cipher.decrypt(keypair1.private_key(), &ciphertext).unwrap();
         assert_eq!(decrypted1, plaintext);
 
-        // Should fail with wrong private key (would fail in real RSA, but our placeholder may not)
-        // This test documents the expected behavior even though our placeholder doesn't enforce it
-        // let result = cipher.decrypt(keypair2.private_key(), &ciphertext);
-        // In real RSA implementation, this would fail
+        // Should fail with wrong private key
+        let result = cipher.decrypt(_keypair2.private_key(), &ciphertext);
+        assert!(
+            result.is_err(),
+            "Decryption should fail with wrong private key"
+        );
     }
 
     #[test]
-    #[ignore] // Skip this test as it uses placeholder RSA implementation
     fn test_encrypt_various_data_sizes() {
         let keypair = KeyPair::generate(2048).unwrap();
         let cipher = RsaOaepCipher::new();
@@ -344,7 +317,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Skip this test as it uses placeholder RSA implementation
     fn test_encrypt_with_special_characters() {
         let keypair = KeyPair::generate(2048).unwrap();
         let cipher = RsaOaepCipher::new();
@@ -359,9 +331,8 @@ mod tests {
     // Property-based tests
     proptest! {
         #[test]
-        #[ignore] // Skip this test as it uses placeholder RSA implementation
         fn test_encrypt_decrypt_roundtrip(
-            data in prop::collection::vec(any::<u8>(), 1..190) // Max 190 bytes for 2048-bit RSA
+            data in prop::collection::vec(any::<u8>(), 1..126) // Max 126 bytes for 2048-bit RSA with SHA-512
         ) {
             let keypair = KeyPair::generate(2048).unwrap();
             let cipher = RsaOaepCipher::new();

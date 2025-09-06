@@ -435,7 +435,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore] // Skip this test as it uses placeholder RSA implementation
     async fn test_encrypt_decrypt_async_basic() {
         let keypair = KeyPair::generate(2048).unwrap();
         let cipher = AsyncHybridCipher::default();

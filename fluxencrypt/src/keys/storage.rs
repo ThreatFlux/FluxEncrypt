@@ -133,10 +133,7 @@ impl KeyStorage {
 
         // Convert key to PEM format
         let pem_data = if self.encrypt_private_keys && options.password.is_some() {
-            // TODO: Implement encrypted PEM export
-            return Err(FluxError::config(
-                "Encrypted private key storage not yet implemented",
-            ));
+            private_key.to_encrypted_pem(options.password.as_ref().unwrap())?
         } else {
             private_key.to_pem()?
         };
@@ -199,15 +196,13 @@ impl KeyStorage {
             ));
         }
 
-        if password.is_some() {
-            // TODO: Implement encrypted key decryption
-            return Err(FluxError::config(
-                "Encrypted private key loading not yet implemented",
-            ));
+        if let Some(pwd) = password {
+            // Parse encrypted private key
+            crate::keys::parsing::parse_encrypted_private_key_from_str(&contents, pwd)
+        } else {
+            // Parse the key from PEM format
+            crate::keys::parsing::parse_private_key_from_str(&contents)
         }
-
-        // Parse the key from PEM format
-        crate::keys::parsing::parse_private_key_from_str(&contents)
     }
 
     /// Load a key pair from separate files
@@ -346,5 +341,38 @@ mod tests {
             loaded_key.key_size_bits(),
             keypair.public_key().key_size_bits()
         );
+    }
+
+    #[test]
+    fn test_save_and_load_encrypted_private_key() {
+        use crate::keys::KeyPair;
+
+        let keypair = KeyPair::generate(2048).unwrap();
+        let storage = KeyStorage::with_encryption();
+        let password = "test_password_123".to_string();
+        let options = StorageOptions {
+            password: Some(password.clone()),
+            ..Default::default()
+        };
+
+        let temp_dir = tempdir().unwrap();
+        let key_path = temp_dir.path().join("test_encrypted_key.pem");
+
+        // Save the encrypted key
+        storage
+            .save_private_key(keypair.private_key(), &key_path, &options)
+            .unwrap();
+
+        // Load it back
+        let loaded_key = storage
+            .load_private_key(&key_path, Some(&password))
+            .unwrap();
+
+        // Check that key components match
+        assert_eq!(
+            loaded_key.key_size_bits(),
+            keypair.private_key().key_size_bits()
+        );
+        assert_eq!(loaded_key.modulus(), keypair.private_key().modulus());
     }
 }

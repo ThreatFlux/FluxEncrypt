@@ -21,6 +21,11 @@ rust-version = "1.89.0"
 [workspace.dependencies]
 # Core cryptography
 ring = "0.17"
+rsa = "0.9"
+pkcs8 = { version = "0.10", features = ["pkcs5", "encryption", "pem"] }
+sha2 = "0.10"
+num-bigint = "0.4"
+num-traits = "0.2"
 zeroize = { version = "1.8", features = ["derive"] }
 
 # Encoding and serialization

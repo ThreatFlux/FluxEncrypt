@@ -315,13 +315,65 @@ impl BatchProcessor {
     #[cfg(feature = "parallel")]
     fn decrypt_files_parallel(
         &self,
-        _file_pairs: &[(PathBuf, PathBuf)],
-        _private_key: &PrivateKey,
-        _batch_config: &BatchConfig,
-        _progress: Option<ProgressCallback>,
+        file_pairs: &[(PathBuf, PathBuf)],
+        private_key: &PrivateKey,
+        batch_config: &BatchConfig,
+        progress: Option<ProgressCallback>,
     ) -> BatchOperationResult {
-        // TODO: Implement similar to encrypt_files_parallel
-        unimplemented!("Parallel decrypt not yet implemented")
+        use rayon::prelude::*;
+
+        let processed_count = Arc::new(AtomicU64::new(0));
+        let total_bytes = Arc::new(AtomicU64::new(0));
+        let failed_files = Arc::new(std::sync::Mutex::new(Vec::new()));
+
+        let results: Vec<_> = file_pairs
+            .par_iter()
+            .map(|(input_path, output_path)| {
+                let result = self
+                    .cipher
+                    .decrypt_file(input_path, output_path, private_key, None);
+
+                match result {
+                    Ok(bytes) => {
+                        processed_count.fetch_add(1, Ordering::Relaxed);
+                        total_bytes.fetch_add(bytes, Ordering::Relaxed);
+
+                        // Call progress callback if provided
+                        if let Some(ref callback) = progress {
+                            let current_processed = processed_count.load(Ordering::Relaxed);
+                            callback(current_processed, file_pairs.len() as u64);
+                        }
+
+                        Ok(())
+                    }
+                    Err(e) => {
+                        let error_msg = e.to_string();
+                        failed_files
+                            .lock()
+                            .unwrap()
+                            .push((input_path.clone(), error_msg.clone()));
+
+                        if !batch_config.continue_on_error {
+                            return Err(e);
+                        }
+
+                        log::warn!("Failed to decrypt {}: {}", input_path.display(), error_msg);
+                        Ok(())
+                    }
+                }
+            })
+            .collect();
+
+        // Check if any operations failed and continue_on_error is false
+        for result in results {
+            result?;
+        }
+
+        let final_processed = processed_count.load(Ordering::Relaxed) as usize;
+        let final_bytes = total_bytes.load(Ordering::Relaxed);
+        let final_failed = Arc::try_unwrap(failed_files).unwrap().into_inner().unwrap();
+
+        Ok((final_processed, final_bytes, final_failed))
     }
 
     #[cfg(not(feature = "parallel"))]
