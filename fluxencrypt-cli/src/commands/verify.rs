@@ -151,8 +151,13 @@ fn verify_file_structure(encrypted_data: &[u8], verbose: bool) -> anyhow::Result
         return Ok(false);
     }
 
-    // Check for reasonable size limits (not larger than 100GB)
-    if encrypted_data.len() > 100_000_000_000 && verbose {
+    // Check for reasonable size limits (not larger than 4GB on 32-bit, 100GB on 64-bit)
+    #[cfg(target_pointer_width = "32")]
+    const MAX_REASONABLE_SIZE: usize = 4_000_000_000; // 4 GB for 32-bit systems
+    #[cfg(target_pointer_width = "64")]
+    const MAX_REASONABLE_SIZE: usize = 100_000_000_000; // 100 GB for 64-bit systems
+    
+    if encrypted_data.len() > MAX_REASONABLE_SIZE && verbose {
         println!("  {} File suspiciously large", "⚠".yellow());
     }
 
