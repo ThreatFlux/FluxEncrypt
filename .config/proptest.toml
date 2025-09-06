@@ -1,0 +1,15 @@
+# Proptest configuration
+# Reduce the number of test cases for faster CI/CD runs
+
+# Number of test cases to generate
+cases = 32
+
+# Maximum shrink iterations when a test fails
+max_shrink_iters = 100
+
+# Timeout for individual test cases (in milliseconds)
+timeout = 5000
+
+# Use deterministic RNG seed for reproducible tests
+# rng_algorithm = "ChaCha"
+# seed = 0

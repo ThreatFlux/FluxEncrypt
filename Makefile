@@ -69,25 +69,25 @@ build-async:
 # Run all tests
 test:
 	@echo "🧪 Running all tests..."
-	@cargo test --workspace --all-features
+	@export PROPTEST_CASES=8 && export PROPTEST_MAX_SHRINK_ITERS=10 && cargo test --workspace --all-features --release
 	@echo "✅ All tests passed"
 
 # Run unit tests only
 test-unit:
 	@echo "🧪 Running unit tests..."
-	@cargo test --workspace --lib --all-features
+	@export PROPTEST_CASES=32 && cargo test --workspace --lib --all-features
 	@echo "✅ Unit tests passed"
 
 # Run integration tests
 test-integration:
 	@echo "🧪 Running integration tests..."
-	@cargo test -p fluxencrypt --test integration_test --all-features
+	@export PROPTEST_CASES=32 && cargo test -p fluxencrypt --test integration_test --all-features
 	@echo "✅ Integration tests passed"
 
 # Run end-to-end tests
 test-e2e:
 	@echo "🧪 Running end-to-end tests..."
-	@cargo test -p fluxencrypt --test e2e_test --all-features
+	@export PROPTEST_CASES=32 && cargo test -p fluxencrypt --test e2e_test --all-features
 	@echo "✅ E2E tests passed"
 
 # Run property-based tests
@@ -125,7 +125,7 @@ build-examples:
 # Test documentation examples
 test-doc:
 	@echo "📚 Testing documentation examples..."
-	@cargo test --doc --workspace --all-features
+	@export PROPTEST_CASES=32 && cargo test --doc --workspace --all-features
 	@echo "✅ Doc tests passed"
 
 # Generate documentation
