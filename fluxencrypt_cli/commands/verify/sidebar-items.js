@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["calculate_entropy","check_for_patterns","display_verification_results","execute","format_bytes","load_private_key","verify_file_structure"],"struct":["VerifyCommand"]};

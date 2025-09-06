@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["benchmark_decryption","benchmark_encryption","benchmark_streaming_encryption","display_benchmark_results","execute","generate_test_data"],"struct":["BenchmarkCommand","BenchmarkResult"]};
