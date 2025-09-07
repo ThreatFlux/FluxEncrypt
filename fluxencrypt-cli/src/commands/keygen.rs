@@ -34,7 +34,7 @@ pub struct KeygenCommand {
     name: String,
 
     /// RSA key size in bits
-    #[arg(short = 's', long, value_parser = parse_key_size, help = "RSA key size (2048, 3072, or 4096)")]
+    #[arg(short = 's', long, value_parser = parse_key_size, default_value = "4096", help = "RSA key size (2048, 3072, or 4096)")]
     key_size: Option<RsaKeySize>,
 
     /// Overwrite existing key files without prompting
@@ -52,6 +52,10 @@ pub struct KeygenCommand {
     /// Show the generated public key
     #[arg(long, help = "Display the generated public key")]
     show_public: bool,
+
+    /// Output keys in base64 format
+    #[arg(long, help = "Save keys in base64 encoded format")]
+    base64: bool,
 }
 
 /// Parse key size argument
@@ -76,13 +80,14 @@ pub fn execute(cmd: KeygenCommand) -> CommandResult {
         interactive,
         password,
         show_public,
+        base64,
     } = cmd;
 
     // Interactive mode setup
     let (final_name, final_key_size, final_password) = if interactive {
         run_interactive_keygen(&name, key_size)?
     } else {
-        (name, key_size.unwrap_or(RsaKeySize::Rsa2048), password)
+        (name, key_size.unwrap_or(RsaKeySize::Rsa4096), password)
     };
 
     // Create output directory
@@ -127,17 +132,51 @@ pub fn execute(cmd: KeygenCommand) -> CommandResult {
     };
 
     // Save the keys
-    let storage = if options.password.is_some() {
-        KeyStorage::with_encryption()
+    if base64 {
+        // Save keys in base64 format
+        println!("{}", "Saving keys in base64 format...".cyan());
+
+        // Get PEM encoded keys
+        let public_pem = keypair
+            .public_key()
+            .to_pem()
+            .map_err(|e| anyhow::anyhow!("Failed to encode public key: {}", e))?;
+        let private_pem = if let Some(ref pwd) = options.password {
+            keypair
+                .private_key()
+                .to_encrypted_pem(pwd)
+                .map_err(|e| anyhow::anyhow!("Failed to encode private key: {}", e))?
+        } else {
+            keypair
+                .private_key()
+                .to_pem()
+                .map_err(|e| anyhow::anyhow!("Failed to encode private key: {}", e))?
+        };
+
+        // Base64 encode the PEM data
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+        let public_b64 = STANDARD.encode(&public_pem);
+        let private_b64 = STANDARD.encode(&private_pem);
+
+        // Save base64 encoded keys
+        std::fs::write(&public_key_path, public_b64)
+            .map_err(|e| anyhow::anyhow!("Failed to save public key: {}", e))?;
+        std::fs::write(&private_key_path, private_b64)
+            .map_err(|e| anyhow::anyhow!("Failed to save private key: {}", e))?;
     } else {
-        KeyStorage::new()
-    };
+        // Save keys in standard PEM format
+        let storage = if options.password.is_some() {
+            KeyStorage::with_encryption()
+        } else {
+            KeyStorage::new()
+        };
 
-    println!("{}", "Saving key files...".cyan());
+        println!("{}", "Saving key files...".cyan());
 
-    storage
-        .save_keypair(&keypair, &public_key_path, &private_key_path, &options)
-        .map_err(|e| anyhow::anyhow!("Failed to save keys: {}", e))?;
+        storage
+            .save_keypair(&keypair, &public_key_path, &private_key_path, &options)
+            .map_err(|e| anyhow::anyhow!("Failed to save keys: {}", e))?;
+    }
 
     // Success message
     println!("{}", "✓ Key pair saved successfully".green());
@@ -202,7 +241,7 @@ fn run_interactive_keygen(
         "3072 bits",
         "4096 bits (maximum security)",
     ];
-    let default_selection = match default_key_size.unwrap_or(RsaKeySize::Rsa2048) {
+    let default_selection = match default_key_size.unwrap_or(RsaKeySize::Rsa4096) {
         RsaKeySize::Rsa2048 => 0,
         RsaKeySize::Rsa3072 => 1,
         RsaKeySize::Rsa4096 => 2,
@@ -267,6 +306,7 @@ fn run_interactive_keygen(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::Parser;
 
     #[test]
     fn test_parse_key_size() {
@@ -274,5 +314,36 @@ mod tests {
         assert!(matches!(parse_key_size("3072"), Ok(RsaKeySize::Rsa3072)));
         assert!(matches!(parse_key_size("4096"), Ok(RsaKeySize::Rsa4096)));
         assert!(parse_key_size("1024").is_err());
+    }
+
+    #[test]
+    fn test_default_key_size_is_4096() {
+        // The default value in the struct should be "4096"
+        #[derive(Parser)]
+        struct TestCli {
+            #[command(flatten)]
+            keygen: KeygenCommand,
+        }
+
+        let cli = TestCli::parse_from(["test"]);
+        // Default should parse to 4096
+        assert_eq!(cli.keygen.key_size, Some(RsaKeySize::Rsa4096));
+    }
+
+    #[test]
+    fn test_base64_flag() {
+        #[derive(Parser)]
+        struct TestCli {
+            #[command(flatten)]
+            keygen: KeygenCommand,
+        }
+
+        // Test without base64 flag
+        let cli = TestCli::parse_from(["test"]);
+        assert!(!cli.keygen.base64);
+
+        // Test with base64 flag
+        let cli = TestCli::parse_from(["test", "--base64"]);
+        assert!(cli.keygen.base64);
     }
 }

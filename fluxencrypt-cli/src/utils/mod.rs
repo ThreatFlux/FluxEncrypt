@@ -63,13 +63,25 @@ pub fn load_public_key(key_path: Option<&str>) -> anyhow::Result<PublicKey> {
 
     let parser = KeyParser::new();
 
+    // Check if the data is base64 encoded
+    let decoded_data = if !key_data.starts_with(b"-----BEGIN") {
+        // Try to decode as base64
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+        match STANDARD.decode(&key_data) {
+            Ok(decoded) => decoded,
+            Err(_) => key_data, // Not base64, use as-is
+        }
+    } else {
+        key_data
+    };
+
     // Try to detect the format
     let format = parser
-        .detect_format(&key_data)
+        .detect_format(&decoded_data)
         .ok_or_else(|| anyhow::anyhow!("Could not detect public key format"))?;
 
     parser
-        .parse_public_key(&key_data, format)
+        .parse_public_key(&decoded_data, format)
         .map_err(|e| anyhow::anyhow!("Failed to parse public key: {}", e))
 }
 
@@ -110,7 +122,19 @@ pub fn load_private_key(
         }
     };
 
-    let key_str = String::from_utf8(key_data)
+    // Check if the data is base64 encoded
+    let decoded_data = if !key_data.starts_with(b"-----BEGIN") {
+        // Try to decode as base64
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+        match STANDARD.decode(&key_data) {
+            Ok(decoded) => decoded,
+            Err(_) => key_data, // Not base64, use as-is
+        }
+    } else {
+        key_data
+    };
+
+    let key_str = String::from_utf8(decoded_data)
         .map_err(|e| anyhow::anyhow!("Private key data is not valid UTF-8: {}", e))?;
 
     // Check if the key is encrypted

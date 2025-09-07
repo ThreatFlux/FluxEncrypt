@@ -32,6 +32,10 @@ pub struct EncryptCommand {
     /// Read data from environment file (.env format)
     #[arg(short, long)]
     env: Option<String>,
+
+    /// Output raw binary instead of base64 encoded (only applies to file output)
+    #[arg(long)]
+    raw: bool,
 }
 
 pub fn execute(cmd: EncryptCommand) -> CommandResult {
@@ -63,7 +67,7 @@ pub fn execute(cmd: EncryptCommand) -> CommandResult {
             .output
             .ok_or_else(|| anyhow::anyhow!("Output file is required when encrypting files"))?;
 
-        encrypt_file(&cryptum, &input_file, &output_file, &public_key)?;
+        encrypt_file(&cryptum, &input_file, &output_file, &public_key, cmd.raw)?;
 
         println!(
             "{} Successfully encrypted {} to {}",
@@ -78,14 +82,24 @@ pub fn execute(cmd: EncryptCommand) -> CommandResult {
             .map_err(|e| anyhow::anyhow!("Encryption failed: {}", e))?;
 
         if let Some(output_file) = cmd.output {
-            // Write to file
-            fs::write(&output_file, &encrypted_data)
+            // Write to file (base64 encoded by default, raw if --raw specified)
+            let output_data = if cmd.raw {
+                encrypted_data
+            } else {
+                BASE64_STANDARD.encode(&encrypted_data).into_bytes()
+            };
+            fs::write(&output_file, &output_data)
                 .map_err(|e| anyhow::anyhow!("Failed to write to output file: {}", e))?;
 
             println!(
-                "{} Successfully encrypted data to {}",
+                "{} Successfully encrypted data to {} {}",
                 "✓".green().bold(),
-                output_file.cyan()
+                output_file.cyan(),
+                if cmd.raw {
+                    "(raw binary)"
+                } else {
+                    "(base64 encoded)"
+                }
             );
         } else {
             // Write to stdout (base64 encoded for readability)
@@ -102,15 +116,25 @@ pub fn execute(cmd: EncryptCommand) -> CommandResult {
             .map_err(|e| anyhow::anyhow!("Encryption failed: {}", e))?;
 
         if let Some(output_file) = cmd.output {
-            // Write to file
-            fs::write(&output_file, &encrypted_data)
+            // Write to file (base64 encoded by default, raw if --raw specified)
+            let output_data = if cmd.raw {
+                encrypted_data
+            } else {
+                BASE64_STANDARD.encode(&encrypted_data).into_bytes()
+            };
+            fs::write(&output_file, &output_data)
                 .map_err(|e| anyhow::anyhow!("Failed to write to output file: {}", e))?;
 
             println!(
-                "{} Successfully encrypted environment file {} to {}",
+                "{} Successfully encrypted environment file {} to {} {}",
                 "✓".green().bold(),
                 env_file.cyan(),
-                output_file.cyan()
+                output_file.cyan(),
+                if cmd.raw {
+                    "(raw binary)"
+                } else {
+                    "(base64 encoded)"
+                }
             );
         } else {
             // Write to stdout (base64 encoded)
@@ -133,14 +157,24 @@ pub fn execute(cmd: EncryptCommand) -> CommandResult {
             .map_err(|e| anyhow::anyhow!("Encryption failed: {}", e))?;
 
         if let Some(output_file) = cmd.output {
-            // Write to file
-            fs::write(&output_file, &encrypted_data)
+            // Write to file (base64 encoded by default, raw if --raw specified)
+            let output_data = if cmd.raw {
+                encrypted_data
+            } else {
+                BASE64_STANDARD.encode(&encrypted_data).into_bytes()
+            };
+            fs::write(&output_file, &output_data)
                 .map_err(|e| anyhow::anyhow!("Failed to write to output file: {}", e))?;
 
             println!(
-                "{} Successfully encrypted stdin data to {}",
+                "{} Successfully encrypted stdin data to {} {}",
                 "✓".green().bold(),
-                output_file.cyan()
+                output_file.cyan(),
+                if cmd.raw {
+                    "(raw binary)"
+                } else {
+                    "(base64 encoded)"
+                }
             );
         } else {
             // Write to stdout (base64 encoded)
@@ -157,6 +191,7 @@ fn encrypt_file(
     input_path: &str,
     output_path: &str,
     public_key: &fluxencrypt::keys::PublicKey,
+    raw_output: bool,
 ) -> CommandResult {
     // Check if input file exists
     if !Path::new(input_path).exists() {
@@ -178,7 +213,13 @@ fn encrypt_file(
             .encrypt(public_key, &plaintext)
             .map_err(|e| anyhow::anyhow!("File encryption failed: {}", e))?;
 
-        fs::write(output_path, &ciphertext)
+        // Write output (base64 encoded by default, raw if specified)
+        let output_data = if raw_output {
+            ciphertext
+        } else {
+            BASE64_STANDARD.encode(&ciphertext).into_bytes()
+        };
+        fs::write(output_path, &output_data)
             .map_err(|e| anyhow::anyhow!("Failed to write output file: {}", e))?;
 
         log::info!(
@@ -191,34 +232,69 @@ fn encrypt_file(
     }
 
     // For large files (>1MB), use streaming encryption with progress bar
-    let pb = ProgressBar::new(file_size);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})")
-            .unwrap()
-            .progress_chars("#>-"),
-    );
+    // Note: For large files with base64 output, we need to read, encrypt, then base64 encode
+    if !raw_output {
+        // For base64 output with large files, we can't use streaming directly
+        // We'll read the file, encrypt it, then base64 encode
+        let plaintext = fs::read(input_path)
+            .map_err(|e| anyhow::anyhow!("Failed to read input file: {}", e))?;
 
-    // Create progress callback
-    let pb_clone = pb.clone();
-    let progress_callback = Box::new(move |current, _total| {
-        pb_clone.set_position(current);
-    });
+        let pb = ProgressBar::new(plaintext.len() as u64);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})")
+                .unwrap()
+                .progress_chars("#>-"),
+        );
 
-    // Perform the streaming encryption
-    let bytes_processed = cryptum
-        .encrypt_file_with_progress(input_path, output_path, public_key, progress_callback)
-        .map_err(|e| anyhow::anyhow!("File encryption failed: {}", e))?;
+        let ciphertext = cryptum
+            .encrypt(public_key, &plaintext)
+            .map_err(|e| anyhow::anyhow!("File encryption failed: {}", e))?;
 
-    // Finish progress bar
-    pb.finish_with_message("Encryption complete");
+        pb.finish_with_message("Encryption complete");
 
-    log::info!(
-        "Encrypted {} bytes from {} to {} (streaming mode)",
-        bytes_processed,
-        input_path,
-        output_path
-    );
+        // Base64 encode and write
+        let encoded = BASE64_STANDARD.encode(&ciphertext);
+        fs::write(output_path, encoded.as_bytes())
+            .map_err(|e| anyhow::anyhow!("Failed to write output file: {}", e))?;
+
+        log::info!(
+            "Encrypted {} bytes from {} to {} (base64 encoded)",
+            plaintext.len(),
+            input_path,
+            output_path
+        );
+    } else {
+        // For raw binary output, use streaming encryption
+        let pb = ProgressBar::new(file_size);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})")
+                .unwrap()
+                .progress_chars("#>-"),
+        );
+
+        // Create progress callback
+        let pb_clone = pb.clone();
+        let progress_callback = Box::new(move |current, _total| {
+            pb_clone.set_position(current);
+        });
+
+        // Perform the streaming encryption
+        let bytes_processed = cryptum
+            .encrypt_file_with_progress(input_path, output_path, public_key, progress_callback)
+            .map_err(|e| anyhow::anyhow!("File encryption failed: {}", e))?;
+
+        // Finish progress bar
+        pb.finish_with_message("Encryption complete");
+
+        log::info!(
+            "Encrypted {} bytes from {} to {} (streaming mode, raw binary)",
+            bytes_processed,
+            input_path,
+            output_path
+        );
+    }
 
     Ok(())
 }

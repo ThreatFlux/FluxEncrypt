@@ -32,6 +32,10 @@ pub struct DecryptCommand {
     /// Data to decrypt directly (base64 encoded, alternative to input file or stdin)
     #[arg(short, long)]
     data: Option<String>,
+
+    /// Input is raw binary instead of base64 encoded (only applies to file input)
+    #[arg(long)]
+    raw: bool,
 }
 
 pub fn execute(cmd: DecryptCommand) -> CommandResult {
@@ -53,7 +57,7 @@ pub fn execute(cmd: DecryptCommand) -> CommandResult {
         // File input mode
         if let Some(output_file) = cmd.output {
             // File to file decryption
-            decrypt_file(&cryptum, &input_file, &output_file, &private_key)?;
+            decrypt_file(&cryptum, &input_file, &output_file, &private_key, cmd.raw)?;
 
             println!(
                 "{} Successfully decrypted {} to {}",
@@ -63,7 +67,7 @@ pub fn execute(cmd: DecryptCommand) -> CommandResult {
             );
         } else {
             // File to stdout decryption
-            decrypt_file_to_stdout(&cryptum, &input_file, &private_key)?;
+            decrypt_file_to_stdout(&cryptum, &input_file, &private_key, cmd.raw)?;
         }
     } else if let Some(data) = cmd.data {
         // Direct data mode (base64 encoded)
@@ -136,6 +140,7 @@ fn decrypt_file(
     input_path: &str,
     output_path: &str,
     private_key: &fluxencrypt::keys::PrivateKey,
+    raw_input: bool,
 ) -> CommandResult {
     // Check if input file exists
     if !Path::new(input_path).exists() {
@@ -150,8 +155,21 @@ fn decrypt_file(
 
     // For small files (<=1MB), use simple hybrid decryption to avoid streaming issues
     if file_size <= 1_000_000 {
-        let ciphertext = fs::read(input_path)
+        let file_data = fs::read(input_path)
             .map_err(|e| anyhow::anyhow!("Failed to read input file: {}", e))?;
+
+        // Decode base64 if not raw input
+        let ciphertext = if !raw_input {
+            // Try to decode as base64
+            let file_str = String::from_utf8(file_data).map_err(|e| {
+                anyhow::anyhow!("Input file is not valid UTF-8 for base64 decoding: {}", e)
+            })?;
+            BASE64_STANDARD
+                .decode(file_str.trim())
+                .map_err(|e| anyhow::anyhow!("Failed to decode base64 from input file: {}", e))?
+        } else {
+            file_data
+        };
 
         let plaintext = cryptum
             .decrypt(private_key, &ciphertext)
@@ -169,35 +187,70 @@ fn decrypt_file(
         return Ok(());
     }
 
-    // For large files (>1MB), use streaming decryption with progress bar
-    let pb = ProgressBar::new(file_size);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})")
-            .unwrap()
-            .progress_chars("#>-"),
-    );
+    // For large files (>1MB), handle base64 decoding
+    if !raw_input {
+        // For base64 input with large files, we need to read and decode first
+        let file_data = fs::read_to_string(input_path)
+            .map_err(|e| anyhow::anyhow!("Failed to read input file: {}", e))?;
 
-    // Create progress callback
-    let pb_clone = pb.clone();
-    let progress_callback = Box::new(move |current, _total| {
-        pb_clone.set_position(current);
-    });
+        let ciphertext = BASE64_STANDARD
+            .decode(file_data.trim())
+            .map_err(|e| anyhow::anyhow!("Failed to decode base64 from input file: {}", e))?;
 
-    // Perform the streaming decryption
-    let bytes_processed = cryptum
-        .decrypt_file_with_progress(input_path, output_path, private_key, progress_callback)
-        .map_err(|e| anyhow::anyhow!("File decryption failed: {}", e))?;
+        let pb = ProgressBar::new(ciphertext.len() as u64);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})")
+                .unwrap()
+                .progress_chars("#>-"),
+        );
 
-    // Finish progress bar
-    pb.finish_with_message("Decryption complete");
+        let plaintext = cryptum
+            .decrypt(private_key, &ciphertext)
+            .map_err(|e| anyhow::anyhow!("File decryption failed: {}", e))?;
 
-    log::info!(
-        "Decrypted {} bytes from {} to {} (streaming mode)",
-        bytes_processed,
-        input_path,
-        output_path
-    );
+        pb.finish_with_message("Decryption complete");
+
+        fs::write(output_path, &plaintext)
+            .map_err(|e| anyhow::anyhow!("Failed to write output file: {}", e))?;
+
+        log::info!(
+            "Decrypted {} bytes from {} to {} (base64 decoded)",
+            plaintext.len(),
+            input_path,
+            output_path
+        );
+    } else {
+        // For raw binary input, use streaming decryption
+        let pb = ProgressBar::new(file_size);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})")
+                .unwrap()
+                .progress_chars("#>-"),
+        );
+
+        // Create progress callback
+        let pb_clone = pb.clone();
+        let progress_callback = Box::new(move |current, _total| {
+            pb_clone.set_position(current);
+        });
+
+        // Perform the streaming decryption
+        let bytes_processed = cryptum
+            .decrypt_file_with_progress(input_path, output_path, private_key, progress_callback)
+            .map_err(|e| anyhow::anyhow!("File decryption failed: {}", e))?;
+
+        // Finish progress bar
+        pb.finish_with_message("Decryption complete");
+
+        log::info!(
+            "Decrypted {} bytes from {} to {} (streaming mode, raw binary)",
+            bytes_processed,
+            input_path,
+            output_path
+        );
+    }
 
     Ok(())
 }
@@ -206,6 +259,7 @@ fn decrypt_file_to_stdout(
     cryptum: &Cryptum,
     input_path: &str,
     private_key: &fluxencrypt::keys::PrivateKey,
+    raw_input: bool,
 ) -> CommandResult {
     // Check if input file exists
     if !Path::new(input_path).exists() {
@@ -216,8 +270,21 @@ fn decrypt_file_to_stdout(
     }
 
     // For stdout mode, always use simple hybrid decryption
-    let encrypted_data =
+    let file_data =
         fs::read(input_path).map_err(|e| anyhow::anyhow!("Failed to read input file: {}", e))?;
+
+    // Decode base64 if not raw input
+    let encrypted_data = if !raw_input {
+        // Try to decode as base64
+        let file_str = String::from_utf8(file_data).map_err(|e| {
+            anyhow::anyhow!("Input file is not valid UTF-8 for base64 decoding: {}", e)
+        })?;
+        BASE64_STANDARD
+            .decode(file_str.trim())
+            .map_err(|e| anyhow::anyhow!("Failed to decode base64 from input file: {}", e))?
+    } else {
+        file_data
+    };
 
     let decrypted_data = cryptum
         .decrypt(private_key, &encrypted_data)
