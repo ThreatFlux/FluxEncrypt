@@ -123,26 +123,46 @@ impl KeyStorage {
         path: &Path,
         options: &StorageOptions,
     ) -> Result<()> {
-        // Check if file exists and overwrite is not allowed
+        self.check_file_overwrite_policy(path, options)?;
+        let pem_data = self.generate_private_key_pem(private_key, options)?;
+        self.write_private_key_file(path, &pem_data)?;
+        log::info!("Private key saved to: {}", path.display());
+        Ok(())
+    }
+
+    /// Check if file exists and handle overwrite policy
+    fn check_file_overwrite_policy(&self, path: &Path, options: &StorageOptions) -> Result<()> {
         if path.exists() && !options.overwrite {
             return Err(FluxError::invalid_input(format!(
                 "File already exists: {}",
                 path.display()
             )));
         }
+        Ok(())
+    }
 
-        // Convert key to PEM format
-        let pem_data = if self.encrypt_private_keys && options.password.is_some() {
-            private_key.to_encrypted_pem(options.password.as_ref().unwrap())?
+    /// Generate PEM data for private key based on encryption settings
+    fn generate_private_key_pem(
+        &self,
+        private_key: &PrivateKey,
+        options: &StorageOptions,
+    ) -> Result<String> {
+        if self.should_encrypt_private_key(options) {
+            private_key.to_encrypted_pem(options.password.as_ref().unwrap())
         } else {
-            private_key.to_pem()?
-        };
+            private_key.to_pem()
+        }
+    }
 
-        // Write to file with restrictive permissions
+    /// Check if private key should be encrypted
+    fn should_encrypt_private_key(&self, options: &StorageOptions) -> bool {
+        self.encrypt_private_keys && options.password.is_some()
+    }
+
+    /// Write private key file with restrictive permissions
+    fn write_private_key_file(&self, path: &Path, pem_data: &str) -> Result<()> {
         let mut file = self.create_file_with_permissions(path, Some(0o600))?;
         file.write_all(pem_data.as_bytes())?;
-
-        log::info!("Private key saved to: {}", path.display());
         Ok(())
     }
 
@@ -374,5 +394,83 @@ mod tests {
             keypair.private_key().key_size_bits()
         );
         assert_eq!(loaded_key.modulus(), keypair.private_key().modulus());
+    }
+
+    #[test]
+    fn test_check_file_overwrite_policy() {
+        let storage = KeyStorage::new();
+        let temp_dir = tempdir().unwrap();
+        let key_path = temp_dir.path().join("test_overwrite.pem");
+
+        // Test with non-existent file - should succeed
+        let options = StorageOptions::default();
+        assert!(storage
+            .check_file_overwrite_policy(&key_path, &options)
+            .is_ok());
+
+        // Create the file first
+        std::fs::write(&key_path, "test content").unwrap();
+
+        // Test with existing file and overwrite=false - should fail
+        let result = storage.check_file_overwrite_policy(&key_path, &options);
+        assert!(result.is_err());
+
+        // Test with existing file and overwrite=true - should succeed
+        let options_overwrite = StorageOptions {
+            overwrite: true,
+            ..Default::default()
+        };
+        assert!(storage
+            .check_file_overwrite_policy(&key_path, &options_overwrite)
+            .is_ok());
+    }
+
+    #[test]
+    fn test_should_encrypt_private_key() {
+        let storage_no_encryption = KeyStorage::new();
+        let storage_with_encryption = KeyStorage::with_encryption();
+
+        let options_no_password = StorageOptions::default();
+        let options_with_password = StorageOptions {
+            password: Some("test_password".to_string()),
+            ..Default::default()
+        };
+
+        // No encryption storage should never encrypt
+        assert!(!storage_no_encryption.should_encrypt_private_key(&options_no_password));
+        assert!(!storage_no_encryption.should_encrypt_private_key(&options_with_password));
+
+        // Encryption storage should encrypt only when password is provided
+        assert!(!storage_with_encryption.should_encrypt_private_key(&options_no_password));
+        assert!(storage_with_encryption.should_encrypt_private_key(&options_with_password));
+    }
+
+    #[test]
+    fn test_generate_private_key_pem() {
+        use crate::keys::KeyPair;
+
+        let keypair = KeyPair::generate(2048).unwrap();
+        let storage_no_encryption = KeyStorage::new();
+        let storage_with_encryption = KeyStorage::with_encryption();
+
+        let options_no_password = StorageOptions::default();
+        let options_with_password = StorageOptions {
+            password: Some("test_password".to_string()),
+            ..Default::default()
+        };
+
+        // Test unencrypted PEM generation
+        let pem_unencrypted = storage_no_encryption
+            .generate_private_key_pem(keypair.private_key(), &options_no_password)
+            .unwrap();
+        assert!(pem_unencrypted.starts_with("-----BEGIN RSA PRIVATE KEY-----"));
+        assert!(!pem_unencrypted.contains("ENCRYPTED"));
+
+        // Test encrypted PEM generation
+        let pem_encrypted = storage_with_encryption
+            .generate_private_key_pem(keypair.private_key(), &options_with_password)
+            .unwrap();
+        assert!(pem_encrypted.contains("-----BEGIN"));
+        assert!(pem_encrypted.contains("ENCRYPTED"));
     }
 }

@@ -1,11 +1,11 @@
 # Multi-stage build for FluxEncrypt
 # Stage 1: Build the application
-FROM rust:1.83-slim AS builder
+FROM rust:1.89-slim AS builder
 
-# Install required dependencies
-RUN apt-get update && apt-get install -y \
-    pkg-config \
-    libssl-dev \
+# Install required dependencies with pinned versions and minimal packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkgconf=1.8.1-4 \
+    libssl-dev=3.5.1-1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -18,8 +18,13 @@ COPY fluxencrypt-cli/Cargo.toml ./fluxencrypt-cli/
 COPY fluxencrypt-async/Cargo.toml ./fluxencrypt-async/
 
 # Create dummy main files to cache dependencies
-RUN mkdir -p fluxencrypt/src fluxencrypt-cli/src fluxencrypt-async/src && \
+RUN mkdir -p fluxencrypt/src fluxencrypt/examples fluxencrypt/benches fluxencrypt-cli/src fluxencrypt-async/src && \
     echo "fn main() {}" > fluxencrypt/src/lib.rs && \
+    echo "fn main() {}" > fluxencrypt/examples/basic_encryption.rs && \
+    echo "fn main() {}" > fluxencrypt/examples/file_encryption.rs && \
+    echo "fn main() {}" > fluxencrypt/examples/key_management.rs && \
+    echo "fn main() {}" > fluxencrypt/examples/environment_config.rs && \
+    echo "fn main() {}" > fluxencrypt/benches/encryption_benchmarks.rs && \
     echo "fn main() {}" > fluxencrypt-cli/src/main.rs && \
     echo "fn main() {}" > fluxencrypt-async/src/lib.rs
 
@@ -27,10 +32,12 @@ RUN mkdir -p fluxencrypt/src fluxencrypt-cli/src fluxencrypt-async/src && \
 RUN cargo build --release --package fluxencrypt-cli
 
 # Remove dummy files
-RUN rm -rf fluxencrypt/src fluxencrypt-cli/src fluxencrypt-async/src
+RUN rm -rf fluxencrypt/src fluxencrypt/examples fluxencrypt/benches fluxencrypt-cli/src fluxencrypt-async/src
 
 # Copy actual source code
 COPY fluxencrypt/src ./fluxencrypt/src
+COPY fluxencrypt/examples ./fluxencrypt/examples
+COPY fluxencrypt/benches ./fluxencrypt/benches
 COPY fluxencrypt-cli/src ./fluxencrypt-cli/src
 COPY fluxencrypt-async/src ./fluxencrypt-async/src
 
@@ -39,12 +46,12 @@ RUN touch fluxencrypt/src/lib.rs fluxencrypt-cli/src/main.rs fluxencrypt-async/s
     cargo build --release --package fluxencrypt-cli
 
 # Stage 2: Create minimal runtime image
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y \
-    ca-certificates \
-    libssl3 \
+# Install runtime dependencies with pinned versions and minimal packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates=20250419 \
+    libssl3t64=3.5.1-1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user

@@ -7,7 +7,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔐 FluxEncrypt Go Cryptum Compatibility Validation");
     println!("================================================\n");
     
-    // 1. Verify default configuration
+    test_default_configuration()?;
+    test_pkcs1_key_format()?;
+    test_hybrid_encryption()?;
+    test_cryptum_api()?;
+    print_validation_summary();
+    
+    Ok(())
+}
+
+fn test_default_configuration() -> Result<(), Box<dyn std::error::Error>> {
     println!("✓ Testing default configuration...");
     let config = Config::default();
     assert_eq!(config.rsa_key_size, RsaKeySize::Rsa4096, "Default RSA key size should be 4096-bit");
@@ -17,8 +26,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - AES key length: {} bytes ✓", config.key_length());
     println!("  - GCM nonce length: {} bytes ✓", config.nonce_length());
     println!("  - GCM tag length: {} bytes ✓\n", config.tag_length());
-    
-    // 2. Test PKCS1 key format with 2048-bit for speed
+    Ok(())
+}
+
+fn test_pkcs1_key_format() -> Result<(), Box<dyn std::error::Error>> {
     println!("✓ Testing PKCS1 key format...");
     let keypair_2048 = KeyPair::generate(2048)?;
     let public_pem = keypair_2048.public_key().to_pem()?;
@@ -28,37 +39,54 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert!(private_pem.starts_with("-----BEGIN RSA PRIVATE KEY-----"), "Private key should use PKCS1 format");
     println!("  - Public key uses RSA PUBLIC KEY header ✓");
     println!("  - Private key uses RSA PRIVATE KEY header ✓");
-    
-    // 3. Test hybrid encryption with size limits
+    Ok(())
+}
+
+fn test_hybrid_encryption() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n✓ Testing hybrid encryption format...");
+    let config = Config::default();
     let hybrid_cipher = HybridCipher::new(config);
+    let keypair_2048 = KeyPair::generate(2048)?;
     let test_data = b"Test data for Go cryptum compatibility";
     
-    // Test size limit (use small test to avoid long key generation)
+    test_size_limit_enforcement(&hybrid_cipher, &keypair_2048)?;
+    test_encryption_decryption_cycle(&hybrid_cipher, &keypair_2048, test_data)?;
+    
+    Ok(())
+}
+
+fn test_size_limit_enforcement(hybrid_cipher: &HybridCipher, keypair: &KeyPair) -> Result<(), Box<dyn std::error::Error>> {
     let large_data = vec![0x42u8; 512 * 1024 + 1]; // Over 512KB
-    let result = hybrid_cipher.encrypt(keypair_2048.public_key(), &large_data);
+    let result = hybrid_cipher.encrypt(keypair.public_key(), &large_data);
     assert!(result.is_err(), "Should reject data over 512KB");
     println!("  - 512KB size limit enforced ✓");
-    
-    // Test encryption/decryption
-    let ciphertext = hybrid_cipher.encrypt(keypair_2048.public_key(), test_data)?;
+    Ok(())
+}
+
+fn test_encryption_decryption_cycle(hybrid_cipher: &HybridCipher, keypair: &KeyPair, test_data: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+    let ciphertext = hybrid_cipher.encrypt(keypair.public_key(), test_data)?;
     println!("  - Ciphertext length: {} bytes", ciphertext.len());
     
-    // Test decryption
-    let decrypted = hybrid_cipher.decrypt(keypair_2048.private_key(), &ciphertext)?;
+    let decrypted = hybrid_cipher.decrypt(keypair.private_key(), &ciphertext)?;
     assert_eq!(decrypted, test_data, "Decryption should recover original data");
     println!("  - Encryption/decryption roundtrip ✓");
-    
-    // 4. Test using the main Cryptum API
+    Ok(())
+}
+
+fn test_cryptum_api() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n✓ Testing Cryptum API...");
-    let cryptum = cryptum()?;
+    let cryptum_instance = cryptum()?;
+    let keypair_2048 = KeyPair::generate(2048)?;
     let test_data2 = b"Testing with main API";
     
-    let ciphertext2 = cryptum.encrypt(keypair_2048.public_key(), test_data2)?;
-    let decrypted2 = cryptum.decrypt(keypair_2048.private_key(), &ciphertext2)?;
+    let ciphertext2 = cryptum_instance.encrypt(keypair_2048.public_key(), test_data2)?;
+    let decrypted2 = cryptum_instance.decrypt(keypair_2048.private_key(), &ciphertext2)?;
     assert_eq!(decrypted2, test_data2, "Main API should work");
     println!("  - Main Cryptum API working ✓");
-    
+    Ok(())
+}
+
+fn print_validation_summary() {
     println!("\n🎉 Core compatibility validations passed!");
     println!("FluxEncrypt key changes implemented:");
     println!("  • Default to 4096-bit RSA keys");
@@ -67,6 +95,4 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  • Updated data format for Go cryptum compatibility");
     println!("  • 512KB blob encryption size limit");
     println!("  • RSA-OAEP now uses SHA-512 instead of SHA-256");
-    
-    Ok(())
 }

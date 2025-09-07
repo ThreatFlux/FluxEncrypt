@@ -33,7 +33,7 @@ jobs:
         queries: security-extended,security-and-quality
 
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@stable
+      uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6
 
     - name: Cache dependencies
       uses: actions/cache@v4

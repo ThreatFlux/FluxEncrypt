@@ -15,17 +15,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("FluxEncrypt File Encryption Example");
     println!("===================================");
 
-    // Create a temporary directory for our files
-    let temp_dir = tempdir()?;
-    let base_path = temp_dir.path();
+    let temp_dir = setup_temp_directory()?;
+    let keypair = generate_keypair()?;
+    let (input_file, sample_content) = create_sample_file(&temp_dir)?;
+    let cipher = create_cipher();
 
-    // Generate key pair (4096-bit for production security)
+    let (encrypted_file, encrypted_content) =
+        perform_encryption(&cipher, &input_file, &temp_dir, &keypair)?;
+    let decrypted_file = perform_decryption(&cipher, &encrypted_file, &temp_dir, &keypair)?;
+    verify_integrity(&sample_content, &decrypted_file)?;
+    display_results(
+        &sample_content,
+        &encrypted_content,
+        &decrypted_file,
+        &temp_dir,
+    )?;
+
+    Ok(())
+}
+
+fn setup_temp_directory() -> Result<tempfile::TempDir, Box<dyn std::error::Error>> {
+    Ok(tempdir()?)
+}
+
+fn generate_keypair() -> Result<KeyPair, Box<dyn std::error::Error>> {
     println!("1. Generating RSA key pair (4096-bit)...");
     let keypair = KeyPair::generate(4096)?;
     println!("   ✓ Key pair generated");
+    Ok(keypair)
+}
 
-    // Create sample file
-    let input_file = base_path.join("sample.txt");
+fn create_sample_file(
+    temp_dir: &tempfile::TempDir,
+) -> Result<(std::path::PathBuf, String), Box<dyn std::error::Error>> {
+    let input_file = temp_dir.path().join("sample.txt");
     let sample_content = "This is a sample file for FluxEncrypt file encryption.\n".repeat(100);
     fs::write(&input_file, &sample_content)?;
     println!(
@@ -33,50 +56,72 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         input_file.display(),
         sample_content.len()
     );
+    Ok((input_file, sample_content))
+}
 
-    // Create file stream cipher
+fn create_cipher() -> FileStreamCipher {
     let config = Config::default();
-    let cipher = FileStreamCipher::new(config);
+    FileStreamCipher::new(config)
+}
 
-    // Encrypt the file
+fn perform_encryption(
+    cipher: &FileStreamCipher,
+    input_file: &Path,
+    temp_dir: &tempfile::TempDir,
+    keypair: &KeyPair,
+) -> Result<(std::path::PathBuf, Vec<u8>), Box<dyn std::error::Error>> {
     println!("3. Encrypting file...");
-    let encrypted_file = base_path.join("sample.txt.enc");
-    let bytes_encrypted = cipher.encrypt_file(
-        &input_file,
-        &encrypted_file,
-        keypair.public_key(),
-        None, // No progress callback for this example
-    )?;
+    let encrypted_file = temp_dir.path().join("sample.txt.enc");
+    let bytes_encrypted =
+        cipher.encrypt_file(input_file, &encrypted_file, keypair.public_key(), None)?;
     println!("   ✓ File encrypted: {} bytes processed", bytes_encrypted);
     println!("   Encrypted file: {}", encrypted_file.display());
 
-    // Verify encrypted file exists and has different content
     let encrypted_content = fs::read(&encrypted_file)?;
     println!("   Encrypted file size: {} bytes", encrypted_content.len());
 
-    // Decrypt the file
+    Ok((encrypted_file, encrypted_content))
+}
+
+fn perform_decryption(
+    cipher: &FileStreamCipher,
+    encrypted_file: &Path,
+    temp_dir: &tempfile::TempDir,
+    keypair: &KeyPair,
+) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
     println!("4. Decrypting file...");
-    let decrypted_file = base_path.join("sample_decrypted.txt");
-    let bytes_decrypted = cipher.decrypt_file(
-        &encrypted_file,
-        &decrypted_file,
-        keypair.private_key(),
-        None, // No progress callback for this example
-    )?;
+    let decrypted_file = temp_dir.path().join("sample_decrypted.txt");
+    let bytes_decrypted =
+        cipher.decrypt_file(encrypted_file, &decrypted_file, keypair.private_key(), None)?;
     println!("   ✓ File decrypted: {} bytes processed", bytes_decrypted);
     println!("   Decrypted file: {}", decrypted_file.display());
 
-    // Verify the decrypted content matches original
+    Ok(decrypted_file)
+}
+
+fn verify_integrity(
+    sample_content: &str,
+    decrypted_file: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
     println!("5. Verifying file integrity...");
-    let decrypted_content = fs::read_to_string(&decrypted_file)?;
-    if sample_content == decrypted_content {
+    let decrypted_content = fs::read_to_string(decrypted_file)?;
+    if *sample_content == decrypted_content {
         println!("   ✓ File integrity verified - content matches original!");
+        Ok(())
     } else {
         eprintln!("   ✗ File integrity check failed!");
-        return Err("Decrypted content does not match original".into());
+        Err("Decrypted content does not match original".into())
     }
+}
 
-    // Display file sizes for comparison
+fn display_results(
+    sample_content: &str,
+    encrypted_content: &[u8],
+    decrypted_file: &Path,
+    temp_dir: &tempfile::TempDir,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let decrypted_content = fs::read_to_string(decrypted_file)?;
+
     println!("\nFile Size Comparison:");
     println!("  Original:  {} bytes", sample_content.len());
     println!("  Encrypted: {} bytes", encrypted_content.len());
