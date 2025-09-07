@@ -112,39 +112,11 @@ impl StreamCipher {
     {
         let mut total_processed = 0u64;
 
-        // Simple streaming decryption using hybrid decryption per chunk
-        // Note: This reads chunks with their size prefixes
-
-        let mut buffer = vec![0u8; self.chunk_size];
-
-        loop {
-            let bytes_read = input.read(&mut buffer).map_err(FluxError::from)?;
-
-            if bytes_read == 0 {
-                break; // End of stream
-            }
-
-            // Read chunk size first
-            let mut size_buffer = [0u8; 4];
-            input.read_exact(&mut size_buffer)?;
-            let chunk_size = u32::from_be_bytes(size_buffer) as usize;
-
-            // Read the actual encrypted chunk
-            let mut encrypted_chunk = vec![0u8; chunk_size];
-            input.read_exact(&mut encrypted_chunk)?;
-
-            // Process chunk
-            let decrypted_chunk = self.decrypt_chunk(private_key, &encrypted_chunk)?;
-            output.write_all(&decrypted_chunk)?;
-
-            total_processed += chunk_size as u64;
-
-            total_processed += bytes_read as u64;
-
-            // Call progress callback if provided
-            if let Some(ref callback) = progress {
-                callback(total_processed, total_processed);
-            }
+        while let Some(chunk_size) =
+            self.try_decrypt_next_chunk(private_key, &mut input, &mut output)?
+        {
+            total_processed += chunk_size;
+            self.call_progress_callback(&progress, total_processed);
         }
 
         Ok(total_processed)
@@ -170,6 +142,67 @@ impl StreamCipher {
     /// Get the configuration
     pub fn config(&self) -> &Config {
         &self.config
+    }
+
+    /// Try to decrypt the next chunk from the input stream
+    /// Returns Some(chunk_size) if successful, None if end of stream
+    fn try_decrypt_next_chunk<R, W>(
+        &self,
+        private_key: &PrivateKey,
+        input: &mut R,
+        output: &mut W,
+    ) -> Result<Option<u64>>
+    where
+        R: Read,
+        W: Write,
+    {
+        // Try to read chunk size first
+        let chunk_size = match self.read_chunk_size(input)? {
+            Some(size) => size,
+            None => return Ok(None), // End of stream
+        };
+
+        // Read and decrypt the chunk
+        let encrypted_chunk = self.read_encrypted_chunk(input, chunk_size)?;
+        let decrypted_chunk = self.decrypt_chunk(private_key, &encrypted_chunk)?;
+
+        // Write decrypted data
+        output.write_all(&decrypted_chunk)?;
+
+        Ok(Some(chunk_size as u64))
+    }
+
+    /// Read chunk size from input stream
+    /// Returns Some(size) if successful, None if end of stream
+    fn read_chunk_size<R: Read>(&self, input: &mut R) -> Result<Option<usize>> {
+        let mut size_buffer = [0u8; 4];
+        match input.read_exact(&mut size_buffer) {
+            Ok(()) => {
+                let chunk_size = u32::from_be_bytes(size_buffer) as usize;
+                Ok(Some(chunk_size))
+            }
+            Err(e) => {
+                if e.kind() == std::io::ErrorKind::UnexpectedEof {
+                    Ok(None) // End of stream
+                } else {
+                    Err(FluxError::from(e))
+                }
+            }
+        }
+    }
+
+    /// Read encrypted chunk data from input stream
+    fn read_encrypted_chunk<R: Read>(&self, input: &mut R, chunk_size: usize) -> Result<Vec<u8>> {
+        let mut encrypted_chunk = vec![0u8; chunk_size];
+        input.read_exact(&mut encrypted_chunk)?;
+        Ok(encrypted_chunk)
+    }
+
+    /// Call progress callback if provided
+    fn call_progress_callback(&self, progress: &Option<ProgressCallback>, total_processed: u64) {
+        if let Some(ref callback) = progress {
+            callback(total_processed, total_processed);
+        }
     }
 }
 

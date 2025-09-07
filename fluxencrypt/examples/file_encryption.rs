@@ -19,9 +19,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = tempdir()?;
     let base_path = temp_dir.path();
 
-    // Generate key pair
-    println!("1. Generating RSA key pair...");
-    let keypair = KeyPair::generate(2048)?;
+    // Generate key pair (4096-bit for production security)
+    println!("1. Generating RSA key pair (4096-bit)...");
+    let keypair = KeyPair::generate(4096)?;
     println!("   ✓ Key pair generated");
 
     // Create sample file
@@ -120,7 +120,7 @@ mod tests {
     #[test]
     fn test_file_encryption_example() {
         // Test the core functionality without the full example
-        let _keypair = KeyPair::generate(2048).unwrap();
+        let _keypair = KeyPair::generate(4096).unwrap();
         let cipher = FileStreamCipher::new(Config::default());
 
         // Test that cipher can be created successfully

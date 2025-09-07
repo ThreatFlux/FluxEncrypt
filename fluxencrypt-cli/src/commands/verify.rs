@@ -31,104 +31,17 @@ pub fn execute(cmd: VerifyCommand) -> CommandResult {
     println!("{} Starting file verification...", "🔍".blue().bold());
 
     let start_time = Instant::now();
+    let (file_size, encrypted_data) = read_and_validate_file(&cmd)?;
 
-    // Check if file exists
-    if !Path::new(&cmd.file).exists() {
-        return Err(anyhow::anyhow!("File '{}' does not exist", cmd.file));
-    }
+    let _structure_valid = perform_structure_verification(&encrypted_data, cmd.verbose)?;
 
-    // Get file metadata
-    let metadata = fs::metadata(&cmd.file)?;
-    let file_size = metadata.len();
-
-    if cmd.verbose {
-        println!("{} File: {}", "📁".blue(), cmd.file.cyan());
-        println!("{} Size: {}", "📊".blue(), format_bytes(file_size).cyan());
-    }
-
-    // Read the encrypted file
-    println!("{} Reading encrypted file...", "📖".yellow());
-    let encrypted_data =
-        fs::read(&cmd.file).map_err(|e| anyhow::anyhow!("Failed to read file: {}", e))?;
-
-    if encrypted_data.is_empty() {
-        println!("{} File is empty", "⚠".yellow());
-        return Ok(());
-    }
-
-    // Basic structure verification
-    println!("{} Verifying file structure...", "🔧".cyan());
-
-    let structure_valid = verify_file_structure(&encrypted_data, cmd.verbose)?;
-
-    if structure_valid {
-        println!("{} File structure is valid", "✓".green());
-    } else {
-        println!("{} File structure is invalid", "❌".red());
-        return Err(anyhow::anyhow!("Invalid file structure"));
-    }
-
-    // If only structure verification is requested, stop here
     if cmd.structure_only {
         let elapsed = start_time.elapsed();
         display_verification_results("Structure Verification", file_size, elapsed, true, false);
         return Ok(());
     }
 
-    // Full decryption verification (requires private key)
-    if let Some(key_path) = cmd.key {
-        println!("{} Performing decryption verification...", "🔓".yellow());
-
-        let private_key = load_private_key(&key_path)
-            .map_err(|e| anyhow::anyhow!("Failed to load private key: {}", e))?;
-
-        let cryptum =
-            cryptum().map_err(|e| anyhow::anyhow!("Failed to create cryptum instance: {}", e))?;
-
-        // Attempt decryption to verify file integrity
-        match cryptum.decrypt(&private_key, &encrypted_data) {
-            Ok(decrypted_data) => {
-                println!("{} Decryption verification successful", "✓".green());
-
-                if cmd.verbose {
-                    println!(
-                        "  {} Decrypted size: {}",
-                        "📦".blue(),
-                        format_bytes(decrypted_data.len() as u64).cyan()
-                    );
-                    println!(
-                        "  {} Compression ratio: {:.1}%",
-                        "🗜".purple(),
-                        (decrypted_data.len() as f64 / encrypted_data.len() as f64 * 100.0)
-                            .to_string()
-                            .cyan()
-                    );
-                }
-
-                let elapsed = start_time.elapsed();
-                display_verification_results("Full Verification", file_size, elapsed, true, true);
-            }
-            Err(e) => {
-                println!("{} Decryption verification failed: {}", "❌".red(), e);
-                let elapsed = start_time.elapsed();
-                display_verification_results(
-                    "Verification Failed",
-                    file_size,
-                    elapsed,
-                    true,
-                    false,
-                );
-                return Err(anyhow::anyhow!("File verification failed: {}", e));
-            }
-        }
-    } else {
-        println!(
-            "{} Skipping decryption verification (no private key provided)",
-            "⚠".yellow()
-        );
-        let elapsed = start_time.elapsed();
-        display_verification_results("Partial Verification", file_size, elapsed, true, false);
-    }
+    perform_decryption_verification(&cmd, &encrypted_data, file_size, start_time)?;
 
     println!(
         "{} Verification completed successfully!",
@@ -138,9 +51,23 @@ pub fn execute(cmd: VerifyCommand) -> CommandResult {
 }
 
 fn verify_file_structure(encrypted_data: &[u8], verbose: bool) -> anyhow::Result<bool> {
-    // Basic checks for encrypted file structure
+    if !check_file_size(encrypted_data, verbose)? {
+        return Ok(false);
+    }
 
-    // Check minimum size (encrypted files should have some overhead)
+    check_file_size_limits(encrypted_data, verbose);
+
+    if !check_entropy(encrypted_data, verbose)? {
+        return Ok(false);
+    }
+
+    check_null_bytes(encrypted_data, verbose);
+    check_patterns(encrypted_data, verbose);
+
+    Ok(true)
+}
+
+fn check_file_size(encrypted_data: &[u8], verbose: bool) -> anyhow::Result<bool> {
     if encrypted_data.len() < 32 {
         if verbose {
             println!(
@@ -150,19 +77,23 @@ fn verify_file_structure(encrypted_data: &[u8], verbose: bool) -> anyhow::Result
         }
         return Ok(false);
     }
+    Ok(true)
+}
 
-    // Check for reasonable size limits (not larger than 4GB on 32-bit, 100GB on 64-bit)
+fn check_file_size_limits(encrypted_data: &[u8], verbose: bool) {
     #[cfg(target_pointer_width = "32")]
-    const MAX_REASONABLE_SIZE: usize = 4_000_000_000; // 4 GB for 32-bit systems
+    const MAX_REASONABLE_SIZE: usize = 4_000_000_000;
     #[cfg(target_pointer_width = "64")]
-    const MAX_REASONABLE_SIZE: usize = 100_000_000_000; // 100 GB for 64-bit systems
+    const MAX_REASONABLE_SIZE: usize = 100_000_000_000;
 
     if encrypted_data.len() > MAX_REASONABLE_SIZE && verbose {
         println!("  {} File suspiciously large", "⚠".yellow());
     }
+}
 
-    // Basic entropy check - encrypted data should have high entropy
+fn check_entropy(encrypted_data: &[u8], verbose: bool) -> anyhow::Result<bool> {
     let entropy = calculate_entropy(encrypted_data);
+
     if verbose {
         println!(
             "  {} File entropy: {:.2} bits",
@@ -171,7 +102,6 @@ fn verify_file_structure(encrypted_data: &[u8], verbose: bool) -> anyhow::Result
         );
     }
 
-    // Good encrypted data should have entropy > 7.5
     if entropy < 7.0 {
         if verbose {
             println!(
@@ -182,7 +112,10 @@ fn verify_file_structure(encrypted_data: &[u8], verbose: bool) -> anyhow::Result
         return Ok(false);
     }
 
-    // Check for null byte patterns (good encrypted data should have few nulls)
+    Ok(true)
+}
+
+fn check_null_bytes(encrypted_data: &[u8], verbose: bool) {
     let null_count = encrypted_data.iter().filter(|&&b| b == 0).count();
     let null_percentage = (null_count as f64 / encrypted_data.len() as f64) * 100.0;
 
@@ -193,20 +126,18 @@ fn verify_file_structure(encrypted_data: &[u8], verbose: bool) -> anyhow::Result
             null_count.to_string().cyan(),
             null_percentage.to_string().cyan()
         );
-    }
 
-    // Too many null bytes might indicate corruption or improper encryption
-    if null_percentage > 5.0 && verbose {
-        println!("  {} High null byte percentage detected", "⚠".yellow());
+        if null_percentage > 5.0 {
+            println!("  {} High null byte percentage detected", "⚠".yellow());
+        }
     }
+}
 
-    // Check for repeating patterns
+fn check_patterns(encrypted_data: &[u8], verbose: bool) {
     let has_patterns = check_for_patterns(encrypted_data, verbose);
     if has_patterns && verbose {
         println!("  {} Repeating patterns detected", "⚠".yellow());
     }
-
-    Ok(true)
 }
 
 fn calculate_entropy(data: &[u8]) -> f64 {
@@ -309,6 +240,140 @@ fn display_verification_results(
     } else if operation == "Full Verification" || operation == "Verification Failed" {
         println!("  {} Decryption valid: {}", "🔓".yellow(), "No".red());
     }
+}
+
+fn read_and_validate_file(cmd: &VerifyCommand) -> anyhow::Result<(u64, Vec<u8>)> {
+    if !Path::new(&cmd.file).exists() {
+        return Err(anyhow::anyhow!("File '{}' does not exist", cmd.file));
+    }
+
+    let metadata = fs::metadata(&cmd.file)?;
+    let file_size = metadata.len();
+
+    if cmd.verbose {
+        println!("{} File: {}", "📁".blue(), cmd.file.cyan());
+        println!("{} Size: {}", "📊".blue(), format_bytes(file_size).cyan());
+    }
+
+    println!("{} Reading encrypted file...", "📖".yellow());
+    let encrypted_data =
+        fs::read(&cmd.file).map_err(|e| anyhow::anyhow!("Failed to read file: {}", e))?;
+
+    if encrypted_data.is_empty() {
+        println!("{} File is empty", "⚠".yellow());
+        return Err(anyhow::anyhow!("File is empty"));
+    }
+
+    Ok((file_size, encrypted_data))
+}
+
+fn perform_structure_verification(encrypted_data: &[u8], verbose: bool) -> anyhow::Result<bool> {
+    println!("{} Verifying file structure...", "🔧".cyan());
+
+    let structure_valid = verify_file_structure(encrypted_data, verbose)?;
+
+    if structure_valid {
+        println!("{} File structure is valid", "✓".green());
+    } else {
+        println!("{} File structure is invalid", "❌".red());
+        return Err(anyhow::anyhow!("Invalid file structure"));
+    }
+
+    Ok(structure_valid)
+}
+
+fn perform_decryption_verification(
+    cmd: &VerifyCommand,
+    encrypted_data: &[u8],
+    file_size: u64,
+    start_time: Instant,
+) -> CommandResult {
+    if let Some(key_path) = &cmd.key {
+        verify_with_decryption(key_path, encrypted_data, file_size, start_time, cmd.verbose)
+    } else {
+        handle_no_key_provided(file_size, start_time)
+    }
+}
+
+fn verify_with_decryption(
+    key_path: &str,
+    encrypted_data: &[u8],
+    file_size: u64,
+    start_time: Instant,
+    verbose: bool,
+) -> CommandResult {
+    println!("{} Performing decryption verification...", "🔓".yellow());
+
+    let private_key = load_private_key(key_path)
+        .map_err(|e| anyhow::anyhow!("Failed to load private key: {}", e))?;
+
+    let cryptum =
+        cryptum().map_err(|e| anyhow::anyhow!("Failed to create cryptum instance: {}", e))?;
+
+    match cryptum.decrypt(&private_key, encrypted_data) {
+        Ok(decrypted_data) => handle_successful_decryption(
+            &decrypted_data,
+            encrypted_data,
+            file_size,
+            start_time,
+            verbose,
+        ),
+        Err(e) => handle_failed_decryption(e, file_size, start_time),
+    }
+}
+
+fn handle_successful_decryption(
+    decrypted_data: &[u8],
+    encrypted_data: &[u8],
+    file_size: u64,
+    start_time: Instant,
+    verbose: bool,
+) -> CommandResult {
+    println!("{} Decryption verification successful", "✓".green());
+
+    if verbose {
+        display_decryption_stats(decrypted_data, encrypted_data);
+    }
+
+    let elapsed = start_time.elapsed();
+    display_verification_results("Full Verification", file_size, elapsed, true, true);
+    Ok(())
+}
+
+fn handle_failed_decryption(
+    error: fluxencrypt::FluxError,
+    file_size: u64,
+    start_time: Instant,
+) -> CommandResult {
+    println!("{} Decryption verification failed: {}", "❌".red(), error);
+    let elapsed = start_time.elapsed();
+    display_verification_results("Verification Failed", file_size, elapsed, true, false);
+    Err(anyhow::anyhow!("File verification failed: {}", error))
+}
+
+fn handle_no_key_provided(file_size: u64, start_time: Instant) -> CommandResult {
+    println!(
+        "{} Skipping decryption verification (no private key provided)",
+        "⚠".yellow()
+    );
+    let elapsed = start_time.elapsed();
+    display_verification_results("Partial Verification", file_size, elapsed, true, false);
+    Ok(())
+}
+
+fn display_decryption_stats(decrypted_data: &[u8], encrypted_data: &[u8]) {
+    println!(
+        "  {} Decrypted size: {}",
+        "📦".blue(),
+        format_bytes(decrypted_data.len() as u64).cyan()
+    );
+    println!(
+        "  {} Compression ratio: {:.1}%",
+        "🗜".purple(),
+        (decrypted_data.len() as f64 / encrypted_data.len() as f64 * 100.0)
+            .to_string()
+            .cyan()
+    );
 }
 
 fn format_bytes(bytes: u64) -> String {

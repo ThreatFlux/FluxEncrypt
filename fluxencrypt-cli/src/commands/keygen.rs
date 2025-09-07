@@ -10,7 +10,7 @@ use fluxencrypt::keys::{
     storage::{KeyStorage, StorageOptions},
     KeyPair,
 };
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Generate a new RSA key pair
 #[derive(Args)]
@@ -83,141 +83,37 @@ pub fn execute(cmd: KeygenCommand) -> CommandResult {
         base64,
     } = cmd;
 
-    // Interactive mode setup
-    let (final_name, final_key_size, final_password) = if interactive {
-        run_interactive_keygen(&name, key_size)?
-    } else {
-        (name, key_size.unwrap_or(RsaKeySize::Rsa4096), password)
-    };
+    // Get final parameters (interactive or default)
+    let (final_name, final_key_size, final_password) =
+        get_final_parameters(&name, key_size, password, interactive)?;
 
-    // Create output directory
-    create_output_directory(&output_dir)?;
+    // Setup file paths
+    let (public_key_path, private_key_path) = setup_file_paths(&output_dir, &final_name)?;
 
-    // Build file paths
-    let public_key_path = output_dir.join(format!("{}.pub", final_name));
-    let private_key_path = output_dir.join(format!("{}.pem", final_name));
+    // Check existing files
+    check_existing_files(&public_key_path, &private_key_path, force)?;
 
-    // Check for existing files
-    if !force {
-        if public_key_path.exists() && !confirm_overwrite(&public_key_path)? {
-            println!("{}", "Key generation cancelled.".yellow());
-            return Ok(());
-        }
-        if private_key_path.exists() && !confirm_overwrite(&private_key_path)? {
-            println!("{}", "Key generation cancelled.".yellow());
-            return Ok(());
-        }
-    }
+    // Generate key pair
+    let keypair = generate_keypair(final_key_size)?;
 
-    // Generate the key pair
-    println!(
-        "{}",
-        format!(
-            "Generating {}-bit RSA key pair...",
-            usize::from(final_key_size)
-        )
-        .cyan()
-    );
+    // Save keys
+    save_keys(
+        &keypair,
+        &public_key_path,
+        &private_key_path,
+        final_password.clone(),
+        force,
+        base64,
+    )?;
 
-    let keypair = KeyPair::generate(final_key_size.into())
-        .map_err(|e| anyhow::anyhow!("Failed to generate key pair: {}", e))?;
-
-    println!("{}", "✓ Key pair generated successfully".green());
-
-    // Prepare storage options
-    let options = StorageOptions {
-        overwrite: force,
-        password: final_password,
-        ..Default::default()
-    };
-
-    // Save the keys
-    if base64 {
-        // Save keys in base64 format
-        println!("{}", "Saving keys in base64 format...".cyan());
-
-        // Get PEM encoded keys
-        let public_pem = keypair
-            .public_key()
-            .to_pem()
-            .map_err(|e| anyhow::anyhow!("Failed to encode public key: {}", e))?;
-        let private_pem = if let Some(ref pwd) = options.password {
-            keypair
-                .private_key()
-                .to_encrypted_pem(pwd)
-                .map_err(|e| anyhow::anyhow!("Failed to encode private key: {}", e))?
-        } else {
-            keypair
-                .private_key()
-                .to_pem()
-                .map_err(|e| anyhow::anyhow!("Failed to encode private key: {}", e))?
-        };
-
-        // Base64 encode the PEM data
-        use base64::{engine::general_purpose::STANDARD, Engine as _};
-        let public_b64 = STANDARD.encode(&public_pem);
-        let private_b64 = STANDARD.encode(&private_pem);
-
-        // Save base64 encoded keys
-        std::fs::write(&public_key_path, public_b64)
-            .map_err(|e| anyhow::anyhow!("Failed to save public key: {}", e))?;
-        std::fs::write(&private_key_path, private_b64)
-            .map_err(|e| anyhow::anyhow!("Failed to save private key: {}", e))?;
-    } else {
-        // Save keys in standard PEM format
-        let storage = if options.password.is_some() {
-            KeyStorage::with_encryption()
-        } else {
-            KeyStorage::new()
-        };
-
-        println!("{}", "Saving key files...".cyan());
-
-        storage
-            .save_keypair(&keypair, &public_key_path, &private_key_path, &options)
-            .map_err(|e| anyhow::anyhow!("Failed to save keys: {}", e))?;
-    }
-
-    // Success message
-    println!("{}", "✓ Key pair saved successfully".green());
-    println!("  {} {}", "Public key:".bold(), public_key_path.display());
-    println!("  {} {}", "Private key:".bold(), private_key_path.display());
-
-    if options.password.is_some() {
-        println!(
-            "  {} {}",
-            "Private key encryption:".bold(),
-            "Enabled".green()
-        );
-    } else {
-        println!(
-            "  {} {}",
-            "Private key encryption:".bold(),
-            "Disabled".yellow()
-        );
-        println!(
-            "  {} Consider using a password for additional security",
-            "Tip:".yellow().bold()
-        );
-    }
-
-    // Show public key if requested
-    if show_public {
-        match keypair.public_key().to_pem() {
-            Ok(pem) => {
-                println!("\n{}", "Public Key:".bold().underline());
-                println!("{}", pem);
-            }
-            Err(e) => {
-                log::warn!("Could not display public key: {}", e);
-            }
-        }
-    }
-
-    println!(
-        "\n{}",
-        "Key generation completed successfully!".green().bold()
-    );
+    // Display results
+    display_results(
+        &public_key_path,
+        &private_key_path,
+        final_password,
+        show_public,
+        &keypair,
+    )?;
 
     Ok(())
 }
@@ -229,13 +125,27 @@ fn run_interactive_keygen(
 ) -> anyhow::Result<(String, RsaKeySize, Option<String>)> {
     println!("{}", "=== Interactive Key Generation ===".cyan().bold());
 
-    // Get key name
+    let name = prompt_key_name(default_name)?;
+    let key_size = prompt_key_size(default_key_size)?;
+    let password = prompt_password()?;
+
+    display_summary(&name, key_size, &password)?;
+    confirm_generation()?;
+
+    Ok((name, key_size, password))
+}
+
+/// Prompt for key name
+fn prompt_key_name(default_name: &str) -> anyhow::Result<String> {
     let name: String = Input::new()
         .with_prompt("Key name")
         .default(default_name.to_string())
         .interact()?;
+    Ok(name)
+}
 
-    // Get key size
+/// Prompt for key size selection
+fn prompt_key_size(default_key_size: Option<RsaKeySize>) -> anyhow::Result<RsaKeySize> {
     let key_size_options = vec![
         "2048 bits (recommended)",
         "3072 bits",
@@ -260,23 +170,33 @@ fn run_interactive_keygen(
         _ => unreachable!(),
     };
 
-    // Ask about password protection
+    Ok(key_size)
+}
+
+/// Prompt for password protection
+fn prompt_password() -> anyhow::Result<Option<String>> {
     let use_password = Confirm::new()
         .with_prompt("Encrypt private key with password?")
         .default(false)
         .interact()?;
 
-    let password = if use_password {
+    if use_password {
         let password: String = dialoguer::Password::new()
             .with_prompt("Private key password")
             .with_confirmation("Confirm password", "Passwords don't match")
             .interact()?;
-        Some(password)
+        Ok(Some(password))
     } else {
-        None
-    };
+        Ok(None)
+    }
+}
 
-    // Summary
+/// Display generation summary
+fn display_summary(
+    name: &str,
+    key_size: RsaKeySize,
+    password: &Option<String>,
+) -> anyhow::Result<()> {
     println!("\n{}", "=== Generation Summary ===".cyan().bold());
     println!("Key name: {}", name.bold());
     println!(
@@ -291,7 +211,11 @@ fn run_interactive_keygen(
             "No".yellow()
         }
     );
+    Ok(())
+}
 
+/// Confirm final generation
+fn confirm_generation() -> anyhow::Result<()> {
     if !Confirm::new()
         .with_prompt("Generate key pair with these settings?")
         .default(true)
@@ -299,8 +223,215 @@ fn run_interactive_keygen(
     {
         return Err(anyhow::anyhow!("Key generation cancelled by user"));
     }
+    Ok(())
+}
 
-    Ok((name, key_size, password))
+/// Get final parameters based on interactive mode or defaults
+fn get_final_parameters(
+    name: &str,
+    key_size: Option<RsaKeySize>,
+    password: Option<String>,
+    interactive: bool,
+) -> anyhow::Result<(String, RsaKeySize, Option<String>)> {
+    if interactive {
+        run_interactive_keygen(name, key_size)
+    } else {
+        Ok((
+            name.to_string(),
+            key_size.unwrap_or(RsaKeySize::Rsa4096),
+            password,
+        ))
+    }
+}
+
+/// Setup file paths and create output directory
+fn setup_file_paths(
+    output_dir: &std::path::Path,
+    name: &str,
+) -> anyhow::Result<(PathBuf, PathBuf)> {
+    create_output_directory(output_dir)?;
+    let public_key_path = output_dir.join(format!("{}.pub", name));
+    let private_key_path = output_dir.join(format!("{}.pem", name));
+    Ok((public_key_path, private_key_path))
+}
+
+/// Check if files exist and confirm overwrite if needed
+fn check_existing_files(
+    public_key_path: &Path,
+    private_key_path: &Path,
+    force: bool,
+) -> anyhow::Result<()> {
+    if force {
+        return Ok(());
+    }
+
+    if public_key_path.exists() && !confirm_overwrite(public_key_path)? {
+        println!("{}", "Key generation cancelled.".yellow());
+        return Err(anyhow::anyhow!("Operation cancelled by user"));
+    }
+    if private_key_path.exists() && !confirm_overwrite(private_key_path)? {
+        println!("{}", "Key generation cancelled.".yellow());
+        return Err(anyhow::anyhow!("Operation cancelled by user"));
+    }
+
+    Ok(())
+}
+
+/// Generate the RSA key pair
+fn generate_keypair(key_size: RsaKeySize) -> anyhow::Result<KeyPair> {
+    println!(
+        "{}",
+        format!("Generating {}-bit RSA key pair...", usize::from(key_size)).cyan()
+    );
+
+    let keypair = KeyPair::generate(key_size.into())
+        .map_err(|e| anyhow::anyhow!("Failed to generate key pair: {}", e))?;
+
+    println!("{}", "✓ Key pair generated successfully".green());
+    Ok(keypair)
+}
+
+/// Save keys in either base64 or PEM format
+fn save_keys(
+    keypair: &KeyPair,
+    public_key_path: &Path,
+    private_key_path: &Path,
+    password: Option<String>,
+    force: bool,
+    base64: bool,
+) -> anyhow::Result<()> {
+    let options = StorageOptions {
+        overwrite: force,
+        password: password.clone(),
+        ..Default::default()
+    };
+
+    if base64 {
+        save_keys_base64(keypair, public_key_path, private_key_path, &options)?;
+    } else {
+        save_keys_pem(keypair, public_key_path, private_key_path, &options)?;
+    }
+
+    Ok(())
+}
+
+/// Save keys in base64 format
+fn save_keys_base64(
+    keypair: &KeyPair,
+    public_key_path: &Path,
+    private_key_path: &Path,
+    options: &StorageOptions,
+) -> anyhow::Result<()> {
+    println!("{}", "Saving keys in base64 format...".cyan());
+
+    let public_pem = keypair
+        .public_key()
+        .to_pem()
+        .map_err(|e| anyhow::anyhow!("Failed to encode public key: {}", e))?;
+    let private_pem = if let Some(ref pwd) = options.password {
+        keypair
+            .private_key()
+            .to_encrypted_pem(pwd)
+            .map_err(|e| anyhow::anyhow!("Failed to encode private key: {}", e))?
+    } else {
+        keypair
+            .private_key()
+            .to_pem()
+            .map_err(|e| anyhow::anyhow!("Failed to encode private key: {}", e))?
+    };
+
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    let public_b64 = STANDARD.encode(&public_pem);
+    let private_b64 = STANDARD.encode(&private_pem);
+
+    std::fs::write(public_key_path, public_b64)
+        .map_err(|e| anyhow::anyhow!("Failed to save public key: {}", e))?;
+    std::fs::write(private_key_path, private_b64)
+        .map_err(|e| anyhow::anyhow!("Failed to save private key: {}", e))?;
+
+    Ok(())
+}
+
+/// Save keys in PEM format
+fn save_keys_pem(
+    keypair: &KeyPair,
+    public_key_path: &Path,
+    private_key_path: &Path,
+    options: &StorageOptions,
+) -> anyhow::Result<()> {
+    let storage = if options.password.is_some() {
+        KeyStorage::with_encryption()
+    } else {
+        KeyStorage::new()
+    };
+
+    println!("{}", "Saving key files...".cyan());
+
+    storage
+        .save_keypair(keypair, public_key_path, private_key_path, options)
+        .map_err(|e| anyhow::anyhow!("Failed to save keys: {}", e))?;
+
+    Ok(())
+}
+
+/// Display success messages and results
+fn display_results(
+    public_key_path: &Path,
+    private_key_path: &Path,
+    password: Option<String>,
+    show_public: bool,
+    keypair: &KeyPair,
+) -> anyhow::Result<()> {
+    println!("{}", "✓ Key pair saved successfully".green());
+    println!("  {} {}", "Public key:".bold(), public_key_path.display());
+    println!("  {} {}", "Private key:".bold(), private_key_path.display());
+
+    display_encryption_status(password.is_some());
+
+    if show_public {
+        display_public_key(keypair);
+    }
+
+    println!(
+        "\n{}",
+        "Key generation completed successfully!".green().bold()
+    );
+
+    Ok(())
+}
+
+/// Display encryption status message
+fn display_encryption_status(has_password: bool) {
+    if has_password {
+        println!(
+            "  {} {}",
+            "Private key encryption:".bold(),
+            "Enabled".green()
+        );
+    } else {
+        println!(
+            "  {} {}",
+            "Private key encryption:".bold(),
+            "Disabled".yellow()
+        );
+        println!(
+            "  {} Consider using a password for additional security",
+            "Tip:".yellow().bold()
+        );
+    }
+}
+
+/// Display the public key if requested
+fn display_public_key(keypair: &KeyPair) {
+    match keypair.public_key().to_pem() {
+        Ok(pem) => {
+            println!("\n{}", "Public Key:".bold().underline());
+            println!("{}", pem);
+        }
+        Err(e) => {
+            log::warn!("Could not display public key: {}", e);
+        }
+    }
 }
 
 #[cfg(test)]

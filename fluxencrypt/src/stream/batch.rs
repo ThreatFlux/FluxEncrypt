@@ -459,24 +459,43 @@ impl BatchProcessor {
             let entry = entry?;
             let path = entry.path();
 
-            if path.is_file() {
-                let matches = if let Some(pattern) = pattern {
-                    path.file_name()
-                        .and_then(|name| name.to_str())
-                        .is_some_and(|name| name.contains(pattern))
-                } else {
-                    true
-                };
-
-                if matches {
-                    files.push(path);
-                }
-            } else if path.is_dir() && recursive {
-                Self::find_files_recursive(&path, pattern, recursive, files)?;
-            }
+            Self::process_directory_entry(&path, pattern, recursive, files)?;
         }
 
         Ok(())
+    }
+
+    /// Process a single directory entry
+    fn process_directory_entry(
+        path: &Path,
+        pattern: Option<&str>,
+        recursive: bool,
+        files: &mut Vec<PathBuf>,
+    ) -> Result<()> {
+        if path.is_file() {
+            Self::process_file_entry(path, pattern, files);
+        } else if path.is_dir() && recursive {
+            Self::find_files_recursive(path, pattern, recursive, files)?;
+        }
+        Ok(())
+    }
+
+    /// Process a file entry and add to results if it matches pattern
+    fn process_file_entry(path: &Path, pattern: Option<&str>, files: &mut Vec<PathBuf>) {
+        if Self::file_matches_pattern(path, pattern) {
+            files.push(path.to_path_buf());
+        }
+    }
+
+    /// Check if a file matches the given pattern
+    fn file_matches_pattern(path: &Path, pattern: Option<&str>) -> bool {
+        match pattern {
+            Some(pattern) => path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.contains(pattern)),
+            None => true,
+        }
     }
 }
 

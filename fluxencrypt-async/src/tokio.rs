@@ -100,44 +100,23 @@ impl AsyncHybridCipher {
         R: AsyncRead + Unpin + Send,
         W: AsyncWrite + Unpin + Send,
     {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::io::AsyncWriteExt;
 
-        let mut total_processed = 0u64;
-        let chunk_size = self.cipher.config().stream_chunk_size;
-        let mut buffer = vec![0u8; chunk_size];
+        let mut stream_state = StreamState::new(self.cipher.config().stream_chunk_size);
 
-        loop {
-            let bytes_read = reader.read(&mut buffer).await?;
+        while let Some(chunk) = read_next_chunk(&mut reader, &mut stream_state).await? {
+            let encrypted_chunk = encrypt_chunk_blocking(public_key, &chunk, self).await?;
 
-            if bytes_read == 0 {
-                break; // End of stream
-            }
-
-            let chunk = &buffer[..bytes_read];
-
-            // Encrypt the chunk (this is CPU intensive, so we use spawn_blocking)
-            let public_key_clone = public_key.clone();
-            let chunk_clone = chunk.to_vec();
-            let cipher_clone = self.cipher.clone();
-
-            let encrypted_chunk = tokio::task::spawn_blocking(move || {
-                cipher_clone.encrypt(&public_key_clone, &chunk_clone)
-            })
-            .await
-            .map_err(|e| FluxError::other(e.into()))??;
-
-            // Write the encrypted chunk
             writer.write_all(&encrypted_chunk).await?;
-            total_processed += bytes_read as u64;
+            stream_state.add_processed(chunk.len() as u64);
 
-            // Call progress callback if provided
             if let Some(ref callback) = progress {
-                callback(total_processed, total_processed).await;
+                callback(stream_state.total_processed, stream_state.total_processed).await;
             }
         }
 
         writer.flush().await?;
-        Ok(total_processed)
+        Ok(stream_state.total_processed)
     }
 
     /// Decrypt data from an async reader and write to an async writer
@@ -161,44 +140,23 @@ impl AsyncHybridCipher {
         R: AsyncRead + Unpin + Send,
         W: AsyncWrite + Unpin + Send,
     {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use tokio::io::AsyncWriteExt;
 
-        let mut total_processed = 0u64;
-        let chunk_size = self.cipher.config().stream_chunk_size;
-        let mut buffer = vec![0u8; chunk_size];
+        let mut stream_state = StreamState::new(self.cipher.config().stream_chunk_size);
 
-        loop {
-            let bytes_read = reader.read(&mut buffer).await?;
+        while let Some(chunk) = read_next_chunk(&mut reader, &mut stream_state).await? {
+            let decrypted_chunk = decrypt_chunk_blocking(private_key, &chunk, self).await?;
 
-            if bytes_read == 0 {
-                break; // End of stream
-            }
-
-            let chunk = &buffer[..bytes_read];
-
-            // Decrypt the chunk (this is CPU intensive, so we use spawn_blocking)
-            let private_key_clone = private_key.clone();
-            let chunk_clone = chunk.to_vec();
-            let cipher_clone = self.cipher.clone();
-
-            let decrypted_chunk = tokio::task::spawn_blocking(move || {
-                cipher_clone.decrypt(&private_key_clone, &chunk_clone)
-            })
-            .await
-            .map_err(|e| FluxError::other(e.into()))??;
-
-            // Write the decrypted chunk
             writer.write_all(&decrypted_chunk).await?;
-            total_processed += bytes_read as u64;
+            stream_state.add_processed(chunk.len() as u64);
 
-            // Call progress callback if provided
             if let Some(ref callback) = progress {
-                callback(total_processed, total_processed).await;
+                callback(stream_state.total_processed, stream_state.total_processed).await;
             }
         }
 
         writer.flush().await?;
-        Ok(total_processed)
+        Ok(stream_state.total_processed)
     }
 
     /// Get the underlying sync cipher
@@ -415,6 +373,72 @@ pub async fn decrypt_multiple_async(
     }
 
     Ok(results)
+}
+
+/// State tracking for streaming operations
+#[derive(Debug)]
+struct StreamState {
+    pub total_processed: u64,
+    pub buffer: Vec<u8>,
+}
+
+impl StreamState {
+    fn new(chunk_size: usize) -> Self {
+        Self {
+            total_processed: 0,
+            buffer: vec![0u8; chunk_size],
+        }
+    }
+
+    fn add_processed(&mut self, bytes: u64) {
+        self.total_processed += bytes;
+    }
+}
+
+/// Read the next chunk from an async reader
+async fn read_next_chunk<R>(reader: &mut R, state: &mut StreamState) -> Result<Option<Vec<u8>>>
+where
+    R: AsyncRead + Unpin,
+{
+    use tokio::io::AsyncReadExt;
+
+    let bytes_read = reader.read(&mut state.buffer).await?;
+
+    if bytes_read == 0 {
+        return Ok(None);
+    }
+
+    Ok(Some(state.buffer[..bytes_read].to_vec()))
+}
+
+/// Encrypt a chunk using blocking task
+async fn encrypt_chunk_blocking(
+    public_key: &PublicKey,
+    chunk: &[u8],
+    cipher: &AsyncHybridCipher,
+) -> Result<Vec<u8>> {
+    let public_key_clone = public_key.clone();
+    let chunk_clone = chunk.to_vec();
+    let cipher_clone = cipher.cipher.clone();
+
+    tokio::task::spawn_blocking(move || cipher_clone.encrypt(&public_key_clone, &chunk_clone))
+        .await
+        .map_err(|e| FluxError::other(e.into()))?
+}
+
+/// Decrypt a chunk using blocking task
+async fn decrypt_chunk_blocking(
+    private_key: &PrivateKey,
+    chunk: &[u8],
+    cipher: &AsyncHybridCipher,
+) -> Result<Vec<u8>> {
+    let private_key_clone = private_key.clone();
+    let chunk_clone = chunk.to_vec();
+    let cipher_clone = cipher.cipher.clone();
+
+    tokio::task::spawn_blocking(move || cipher_clone.decrypt(&private_key_clone, &chunk_clone))
+        .await
+        .map_err(|e| FluxError::other(e.into()))?
 }
 
 #[cfg(test)]

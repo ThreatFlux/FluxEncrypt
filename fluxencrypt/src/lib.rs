@@ -6,11 +6,11 @@
 //!
 //! ## Features
 //!
-//! - **Hybrid Encryption**: Combines RSA-OAEP and AES-GCM for optimal security and performance
+//! - **Hybrid Encryption**: Combines RSA-OAEP (4096-bit default) and AES-GCM for optimal security and performance
 //! - **Stream Processing**: Handle large files and data streams efficiently  
 //! - **Memory Safety**: Automatic secret zeroization and secure memory handling
 //! - **Performance**: Hardware-accelerated cryptographic operations
-//! - **Flexibility**: Configurable security parameters and multiple key formats
+//! - **Flexibility**: Configurable security parameters, multiple key formats, and base64 encoding support
 //!
 //! ## Quick Start
 //!
@@ -19,8 +19,8 @@
 //! use fluxencrypt::keys::KeyPair;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! // Generate a new key pair
-//! let keypair = KeyPair::generate(2048)?;
+//! // Generate a new key pair (4096-bit recommended for production)
+//! let keypair = KeyPair::generate(4096)?;
 //!
 //! // Create cipher with default configuration
 //! let cipher = HybridCipher::new(Config::default());

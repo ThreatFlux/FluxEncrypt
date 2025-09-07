@@ -26,64 +26,77 @@ pub struct InfoCommand {
 pub fn execute(cmd: InfoCommand) -> CommandResult {
     println!("{} Analyzing file information...", "ℹ️".blue().bold());
 
-    // Check if file exists
-    if !Path::new(&cmd.file).exists() {
-        return Err(anyhow::anyhow!("File '{}' does not exist", cmd.file));
-    }
+    let (metadata, file_data) = read_and_validate_info_file(&cmd)?;
 
-    // Get file metadata
-    let metadata = fs::metadata(&cmd.file)?;
-    let file_size = metadata.len();
-
-    println!("{} File: {}", "📁".blue(), cmd.file.cyan());
-    println!("{} Size: {}", "📊".blue(), format_bytes(file_size).cyan());
+    display_basic_file_info(&cmd, &metadata);
 
     if cmd.verbose {
-        // Show file timestamps
-        if let Ok(created) = metadata.created() {
-            if let Ok(duration) = created.duration_since(UNIX_EPOCH) {
-                let timestamp = duration.as_secs();
-                println!(
-                    "{} Created: {} (Unix timestamp)",
-                    "📅".blue(),
-                    timestamp.to_string().cyan()
-                );
-            }
-        }
-
-        if let Ok(modified) = metadata.modified() {
-            if let Ok(duration) = modified.duration_since(UNIX_EPOCH) {
-                let timestamp = duration.as_secs();
-                println!(
-                    "{} Modified: {} (Unix timestamp)",
-                    "✏️".yellow(),
-                    timestamp.to_string().cyan()
-                );
-            }
-        }
-
-        // Show file permissions
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mode = metadata.permissions().mode();
-            println!("{} Permissions: {:o}", "🔒".yellow(), mode & 0o777);
-        }
+        display_detailed_file_info(&metadata);
     }
-
-    // Read the file
-    let file_data =
-        fs::read(&cmd.file).map_err(|e| anyhow::anyhow!("Failed to read file: {}", e))?;
 
     if file_data.is_empty() {
         println!("{} File is empty", "⚠".yellow());
         return Ok(());
     }
 
-    // Try to determine file type
     determine_file_type(&file_data, &cmd)?;
-
     Ok(())
+}
+
+fn read_and_validate_info_file(cmd: &InfoCommand) -> anyhow::Result<(fs::Metadata, Vec<u8>)> {
+    if !Path::new(&cmd.file).exists() {
+        return Err(anyhow::anyhow!("File '{}' does not exist", cmd.file));
+    }
+
+    let metadata = fs::metadata(&cmd.file)?;
+    let file_data =
+        fs::read(&cmd.file).map_err(|e| anyhow::anyhow!("Failed to read file: {}", e))?;
+
+    Ok((metadata, file_data))
+}
+
+fn display_basic_file_info(cmd: &InfoCommand, metadata: &fs::Metadata) {
+    let file_size = metadata.len();
+    println!("{} File: {}", "📁".blue(), cmd.file.cyan());
+    println!("{} Size: {}", "📊".blue(), format_bytes(file_size).cyan());
+}
+
+fn display_detailed_file_info(metadata: &fs::Metadata) {
+    display_timestamps(metadata);
+    display_permissions(metadata);
+}
+
+fn display_timestamps(metadata: &fs::Metadata) {
+    if let Ok(created) = metadata.created() {
+        if let Ok(duration) = created.duration_since(UNIX_EPOCH) {
+            let timestamp = duration.as_secs();
+            println!(
+                "{} Created: {} (Unix timestamp)",
+                "📅".blue(),
+                timestamp.to_string().cyan()
+            );
+        }
+    }
+
+    if let Ok(modified) = metadata.modified() {
+        if let Ok(duration) = modified.duration_since(UNIX_EPOCH) {
+            let timestamp = duration.as_secs();
+            println!(
+                "{} Modified: {} (Unix timestamp)",
+                "✏️".yellow(),
+                timestamp.to_string().cyan()
+            );
+        }
+    }
+}
+
+fn display_permissions(metadata: &fs::Metadata) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = metadata.permissions().mode();
+        println!("{} Permissions: {:o}", "🔒".yellow(), mode & 0o777);
+    }
 }
 
 fn determine_file_type(data: &[u8], cmd: &InfoCommand) -> CommandResult {
@@ -174,8 +187,22 @@ fn analyze_key_file(data: &[u8], format: KeyFormat, cmd: &InfoCommand) -> Comman
 fn analyze_encrypted_file(data: &[u8], cmd: &InfoCommand) -> CommandResult {
     println!("\n{} Encrypted File Analysis:", "🔐".yellow().bold());
 
-    // Basic entropy analysis
     let entropy = calculate_entropy(data);
+    display_entropy_analysis(entropy);
+
+    if cmd.verbose {
+        display_detailed_encryption_analysis(data);
+    }
+
+    println!(
+        "{} Estimated type: {}",
+        "🎯".magenta(),
+        "Encrypted data".cyan()
+    );
+    Ok(())
+}
+
+fn display_entropy_analysis(entropy: f64) {
     println!(
         "{} Entropy: {:.2} bits",
         "🎲".blue(),
@@ -189,52 +216,58 @@ fn analyze_encrypted_file(data: &[u8], cmd: &InfoCommand) -> CommandResult {
     } else {
         println!("{} Low entropy - may not be encrypted", "❌".red());
     }
+}
 
-    if cmd.verbose {
-        // Analyze byte distribution
-        let mut byte_counts = [0u32; 256];
-        for &byte in data {
-            byte_counts[byte as usize] += 1;
-        }
+fn display_detailed_encryption_analysis(data: &[u8]) {
+    let byte_counts = calculate_byte_distribution(data);
 
-        let zero_count = byte_counts[0];
-        let zero_percentage = (zero_count as f64 / data.len() as f64) * 100.0;
-        println!(
-            "{} Null bytes: {} ({:.2}%)",
-            "0️⃣".blue(),
-            zero_count.to_string().cyan(),
-            zero_percentage.to_string().cyan()
-        );
+    display_null_byte_analysis(&byte_counts, data.len());
+    display_frequency_analysis(&byte_counts);
+    display_uniqueness_analysis(&byte_counts);
+}
 
-        // Find most/least common bytes
-        let max_count = *byte_counts.iter().max().unwrap();
-        let min_count = *byte_counts.iter().filter(|&&c| c > 0).min().unwrap_or(&0);
-        println!(
-            "{} Most frequent byte appears {} times",
-            "📈".green(),
-            max_count.to_string().cyan()
-        );
-        println!(
-            "{} Least frequent byte appears {} times",
-            "📉".red(),
-            min_count.to_string().cyan()
-        );
-
-        // Compression ratio estimate
-        let unique_bytes = byte_counts.iter().filter(|&&c| c > 0).count();
-        println!(
-            "{} Unique bytes used: {} of 256",
-            "🎨".purple(),
-            unique_bytes.to_string().cyan()
-        );
+fn calculate_byte_distribution(data: &[u8]) -> [u32; 256] {
+    let mut byte_counts = [0u32; 256];
+    for &byte in data {
+        byte_counts[byte as usize] += 1;
     }
+    byte_counts
+}
+
+fn display_null_byte_analysis(byte_counts: &[u32; 256], total_len: usize) {
+    let zero_count = byte_counts[0];
+    let zero_percentage = (zero_count as f64 / total_len as f64) * 100.0;
+    println!(
+        "{} Null bytes: {} ({:.2}%)",
+        "0️⃣".blue(),
+        zero_count.to_string().cyan(),
+        zero_percentage.to_string().cyan()
+    );
+}
+
+fn display_frequency_analysis(byte_counts: &[u32; 256]) {
+    let max_count = *byte_counts.iter().max().unwrap();
+    let min_count = *byte_counts.iter().filter(|&&c| c > 0).min().unwrap_or(&0);
 
     println!(
-        "{} Estimated type: {}",
-        "🎯".magenta(),
-        "Encrypted data".cyan()
+        "{} Most frequent byte appears {} times",
+        "📈".green(),
+        max_count.to_string().cyan()
     );
-    Ok(())
+    println!(
+        "{} Least frequent byte appears {} times",
+        "📉".red(),
+        min_count.to_string().cyan()
+    );
+}
+
+fn display_uniqueness_analysis(byte_counts: &[u32; 256]) {
+    let unique_bytes = byte_counts.iter().filter(|&&c| c > 0).count();
+    println!(
+        "{} Unique bytes used: {} of 256",
+        "🎨".purple(),
+        unique_bytes.to_string().cyan()
+    );
 }
 
 fn analyze_unknown_file(data: &[u8], cmd: &InfoCommand) -> CommandResult {

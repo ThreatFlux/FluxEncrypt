@@ -13,9 +13,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("FluxEncrypt Basic Encryption Example");
     println!("====================================");
 
-    // Generate a new 2048-bit RSA key pair
-    println!("1. Generating RSA key pair (2048-bit)...");
-    let keypair = KeyPair::generate(2048)?;
+    // Generate a new 4096-bit RSA key pair (recommended for production)
+    println!("1. Generating RSA key pair (4096-bit)...");
+    let keypair = KeyPair::generate(4096)?;
     println!("   ✓ Key pair generated successfully");
 
     // Create a cipher with default configuration
@@ -68,9 +68,9 @@ mod tests {
     #[test]
     fn test_basic_encryption() {
         // This test would run the main example logic
-        // For now, we'll just test key generation
-        let keypair = KeyPair::generate(2048).unwrap();
-        assert_eq!(keypair.public_key().key_size_bits(), 2048);
-        assert_eq!(keypair.private_key().key_size_bits(), 2048);
+        // For now, we'll just test key generation with production-recommended size
+        let keypair = KeyPair::generate(4096).unwrap();
+        assert_eq!(keypair.public_key().key_size_bits(), 4096);
+        assert_eq!(keypair.private_key().key_size_bits(), 4096);
     }
 }

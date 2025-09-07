@@ -66,37 +66,56 @@ impl EnvSecret {
     /// Create a secret from a string with a specified format
     pub fn from_string_with_format(value: String, format: SecretFormat) -> Result<Self> {
         let data = match format {
-            SecretFormat::Raw => value.as_bytes().to_vec(),
-            SecretFormat::Base64 => BASE64
-                .decode(&value)
-                .map_err(|e| FluxError::invalid_input(format!("Invalid base64: {}", e)))?,
-            SecretFormat::Hex => {
-                // Simple hex decode implementation
-                let clean_value = value.trim();
-                if clean_value.len() % 2 != 0 {
-                    return Err(FluxError::invalid_input("Hex string must have even length"));
-                }
-
-                let mut result = Vec::with_capacity(clean_value.len() / 2);
-                for chunk in clean_value.as_bytes().chunks(2) {
-                    let hex_str = std::str::from_utf8(chunk)
-                        .map_err(|_| FluxError::invalid_input("Invalid hex characters"))?;
-                    let byte = u8::from_str_radix(hex_str, 16)
-                        .map_err(|_| FluxError::invalid_input("Invalid hex characters"))?;
-                    result.push(byte);
-                }
-                result
-            }
-            SecretFormat::Pem => value.as_bytes().to_vec(), // PEM is text-based
-            SecretFormat::FilePath => {
-                // Read the secret from file
-                std::fs::read(&value).map_err(|e| {
-                    FluxError::invalid_input(format!("Cannot read secret file {}: {}", value, e))
-                })?
-            }
+            SecretFormat::Raw => Self::decode_raw(&value),
+            SecretFormat::Base64 => Self::decode_base64(&value)?,
+            SecretFormat::Hex => Self::decode_hex(&value)?,
+            SecretFormat::Pem => Self::decode_pem(&value),
+            SecretFormat::FilePath => Self::read_from_file(&value)?,
         };
 
         Ok(Self::new(data, format, value))
+    }
+
+    /// Decode raw string data
+    fn decode_raw(value: &str) -> Vec<u8> {
+        value.as_bytes().to_vec()
+    }
+
+    /// Decode base64 string data
+    fn decode_base64(value: &str) -> Result<Vec<u8>> {
+        BASE64
+            .decode(value)
+            .map_err(|e| FluxError::invalid_input(format!("Invalid base64: {}", e)))
+    }
+
+    /// Decode hexadecimal string data
+    fn decode_hex(value: &str) -> Result<Vec<u8>> {
+        let clean_value = value.trim();
+        if clean_value.len() % 2 != 0 {
+            return Err(FluxError::invalid_input("Hex string must have even length"));
+        }
+
+        let mut result = Vec::with_capacity(clean_value.len() / 2);
+        for chunk in clean_value.as_bytes().chunks(2) {
+            let hex_str = std::str::from_utf8(chunk)
+                .map_err(|_| FluxError::invalid_input("Invalid hex characters"))?;
+            let byte = u8::from_str_radix(hex_str, 16)
+                .map_err(|_| FluxError::invalid_input("Invalid hex characters"))?;
+            result.push(byte);
+        }
+        Ok(result)
+    }
+
+    /// Decode PEM format data
+    fn decode_pem(value: &str) -> Vec<u8> {
+        value.as_bytes().to_vec() // PEM is text-based
+    }
+
+    /// Read secret data from file
+    fn read_from_file(value: &str) -> Result<Vec<u8>> {
+        std::fs::read(value).map_err(|e| {
+            FluxError::invalid_input(format!("Cannot read secret file {}: {}", value, e))
+        })
     }
 
     /// Detect the format of a secret string

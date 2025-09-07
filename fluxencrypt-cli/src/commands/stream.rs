@@ -57,79 +57,34 @@ pub struct StreamDecryptCommand {
 
 pub fn execute_encrypt(cmd: StreamEncryptCommand) -> CommandResult {
     println!("{} Starting streaming encryption...", "🔒".green().bold());
-
     let start_time = Instant::now();
 
-    // Validate input file
-    if !Path::new(&cmd.input).exists() {
-        return Err(anyhow::anyhow!("Input file '{}' does not exist", cmd.input));
-    }
+    validate_stream_input(&cmd.input)?;
+    let public_key = load_stream_public_key(&cmd.key)?;
+    let file_size = get_stream_file_size(&cmd.input)?;
 
-    // Load the public key
-    let public_key = load_public_key(&cmd.key)
-        .map_err(|e| anyhow::anyhow!("Failed to load public key: {}", e))?;
+    print_verbose_info_if_enabled(&cmd, file_size);
 
-    // Get file size for progress tracking
-    let file_size = fs::metadata(&cmd.input)?.len();
+    let pb = create_stream_progress_bar(file_size, "Encrypting...");
+    let cipher = create_file_stream_cipher();
+    let progress_callback = create_stream_progress_callback(pb.clone());
 
-    if cmd.verbose {
-        println!(
-            "{} File size: {}",
-            "📊".blue(),
-            format_bytes(file_size).cyan()
-        );
-        println!(
-            "{} Chunk size: {}",
-            "⚙️".yellow(),
-            format_bytes(cmd.chunk_size as u64).cyan()
-        );
-    }
-
-    // Create progress bar
-    let pb = ProgressBar::new(file_size);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta}) {msg}")
-            .unwrap()
-            .progress_chars("#>-"),
-    );
-    pb.set_message("Encrypting...");
-
-    // Create stream cipher with config
-    let config = Config::default();
-    let cipher = FileStreamCipher::new(config);
-
-    // Create progress callback
-    let pb_clone = pb.clone();
-    let progress_callback = Box::new(move |current, _total| {
-        pb_clone.set_position(current);
-    });
-
-    // Perform streaming encryption
-    let bytes_processed = cipher.encrypt_file(
+    let bytes_processed = perform_stream_encryption(
+        &cipher,
         &cmd.input,
         &cmd.output,
         &public_key,
-        Some(progress_callback),
+        progress_callback,
     )?;
 
-    // Finish progress bar
-    pb.finish_with_message("Encryption completed!");
-
-    // Display results
-    let elapsed = start_time.elapsed();
-    display_operation_results(
+    finalize_stream_operation(
+        pb,
+        start_time,
         "Streaming Encryption",
         bytes_processed,
-        elapsed,
         cmd.verbose,
-    );
-
-    println!(
-        "{} Successfully encrypted {} to {}",
-        "✓".green().bold(),
-        cmd.input.cyan(),
-        cmd.output.cyan()
+        &cmd.input,
+        &cmd.output,
     );
 
     Ok(())
@@ -137,79 +92,34 @@ pub fn execute_encrypt(cmd: StreamEncryptCommand) -> CommandResult {
 
 pub fn execute_decrypt(cmd: StreamDecryptCommand) -> CommandResult {
     println!("{} Starting streaming decryption...", "🔓".yellow().bold());
-
     let start_time = Instant::now();
 
-    // Validate input file
-    if !Path::new(&cmd.input).exists() {
-        return Err(anyhow::anyhow!("Input file '{}' does not exist", cmd.input));
-    }
+    validate_stream_input(&cmd.input)?;
+    let private_key = load_stream_private_key(&cmd.key)?;
+    let file_size = get_stream_file_size(&cmd.input)?;
 
-    // Load the private key
-    let private_key = load_private_key(&cmd.key)
-        .map_err(|e| anyhow::anyhow!("Failed to load private key: {}", e))?;
+    print_verbose_decrypt_info_if_enabled(&cmd, file_size);
 
-    // Get file size for progress tracking
-    let file_size = fs::metadata(&cmd.input)?.len();
+    let pb = create_decrypt_progress_bar(file_size);
+    let cipher = create_file_stream_cipher();
+    let progress_callback = create_stream_progress_callback(pb.clone());
 
-    if cmd.verbose {
-        println!(
-            "{} File size: {}",
-            "📊".blue(),
-            format_bytes(file_size).cyan()
-        );
-        println!(
-            "{} Chunk size: {}",
-            "⚙️".yellow(),
-            format_bytes(cmd.chunk_size as u64).cyan()
-        );
-    }
-
-    // Create progress bar
-    let pb = ProgressBar::new(file_size);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("{spinner:.yellow} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta}) {msg}")
-            .unwrap()
-            .progress_chars("#>-"),
-    );
-    pb.set_message("Decrypting...");
-
-    // Create stream cipher with config
-    let config = Config::default();
-    let cipher = FileStreamCipher::new(config);
-
-    // Create progress callback
-    let pb_clone = pb.clone();
-    let progress_callback = Box::new(move |current, _total| {
-        pb_clone.set_position(current);
-    });
-
-    // Perform streaming decryption
-    let bytes_processed = cipher.decrypt_file(
+    let bytes_processed = perform_stream_decryption(
+        &cipher,
         &cmd.input,
         &cmd.output,
         &private_key,
-        Some(progress_callback),
+        progress_callback,
     )?;
 
-    // Finish progress bar
-    pb.finish_with_message("Decryption completed!");
-
-    // Display results
-    let elapsed = start_time.elapsed();
-    display_operation_results(
+    finalize_stream_operation(
+        pb,
+        start_time,
         "Streaming Decryption",
         bytes_processed,
-        elapsed,
         cmd.verbose,
-    );
-
-    println!(
-        "{} Successfully decrypted {} to {}",
-        "✓".green().bold(),
-        cmd.input.cyan(),
-        cmd.output.cyan()
+        &cmd.input,
+        &cmd.output,
     );
 
     Ok(())
@@ -313,4 +223,162 @@ fn format_bytes(bytes: u64) -> String {
     } else {
         format!("{:.1} {}", size, UNITS[unit_index])
     }
+}
+
+/// Validate that the stream input file exists
+fn validate_stream_input(input_path: &str) -> CommandResult {
+    if !Path::new(input_path).exists() {
+        return Err(anyhow::anyhow!(
+            "Input file '{}' does not exist",
+            input_path
+        ));
+    }
+    Ok(())
+}
+
+/// Load public key for stream encryption
+fn load_stream_public_key(key_path: &str) -> Result<fluxencrypt::keys::PublicKey, anyhow::Error> {
+    load_public_key(key_path).map_err(|e| anyhow::anyhow!("Failed to load public key: {}", e))
+}
+
+/// Load private key for stream decryption
+fn load_stream_private_key(key_path: &str) -> Result<fluxencrypt::keys::PrivateKey, anyhow::Error> {
+    load_private_key(key_path).map_err(|e| anyhow::anyhow!("Failed to load private key: {}", e))
+}
+
+/// Get file size for stream processing
+fn get_stream_file_size(input_path: &str) -> Result<u64, anyhow::Error> {
+    fs::metadata(input_path)
+        .map(|metadata| metadata.len())
+        .map_err(|e| anyhow::anyhow!("Failed to read file metadata: {}", e))
+}
+
+/// Print verbose information if enabled for encryption
+fn print_verbose_info_if_enabled(cmd: &StreamEncryptCommand, file_size: u64) {
+    if cmd.verbose {
+        println!(
+            "{} File size: {}",
+            "📊".blue(),
+            format_bytes(file_size).cyan()
+        );
+        println!(
+            "{} Chunk size: {}",
+            "⚙️".yellow(),
+            format_bytes(cmd.chunk_size as u64).cyan()
+        );
+    }
+}
+
+/// Print verbose information if enabled for decryption
+fn print_verbose_decrypt_info_if_enabled(cmd: &StreamDecryptCommand, file_size: u64) {
+    if cmd.verbose {
+        println!(
+            "{} File size: {}",
+            "📊".blue(),
+            format_bytes(file_size).cyan()
+        );
+        println!(
+            "{} Chunk size: {}",
+            "⚙️".yellow(),
+            format_bytes(cmd.chunk_size as u64).cyan()
+        );
+    }
+}
+
+/// Create progress bar for stream encryption
+fn create_stream_progress_bar(file_size: u64, message: &str) -> ProgressBar {
+    let pb = ProgressBar::new(file_size);
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta}) {msg}")
+            .unwrap()
+            .progress_chars("#>-"),
+    );
+    pb.set_message(message.to_string());
+    pb
+}
+
+/// Create progress bar for stream decryption
+fn create_decrypt_progress_bar(file_size: u64) -> ProgressBar {
+    let pb = ProgressBar::new(file_size);
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template("{spinner:.yellow} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta}) {msg}")
+            .unwrap()
+            .progress_chars("#>-"),
+    );
+    pb.set_message("Decrypting...");
+    pb
+}
+
+/// Create file stream cipher with default config
+fn create_file_stream_cipher() -> FileStreamCipher {
+    let config = Config::default();
+    FileStreamCipher::new(config)
+}
+
+/// Create progress callback for streaming operations
+fn create_stream_progress_callback(pb: ProgressBar) -> Box<dyn Fn(u64, u64) + Send + Sync> {
+    Box::new(move |current, _total| {
+        pb.set_position(current);
+    })
+}
+
+/// Perform stream encryption operation
+fn perform_stream_encryption(
+    cipher: &FileStreamCipher,
+    input_path: &str,
+    output_path: &str,
+    public_key: &fluxencrypt::keys::PublicKey,
+    progress_callback: Box<dyn Fn(u64, u64) + Send + Sync>,
+) -> Result<u64, anyhow::Error> {
+    cipher
+        .encrypt_file(input_path, output_path, public_key, Some(progress_callback))
+        .map_err(|e| anyhow::anyhow!("Stream encryption failed: {}", e))
+}
+
+/// Perform stream decryption operation
+fn perform_stream_decryption(
+    cipher: &FileStreamCipher,
+    input_path: &str,
+    output_path: &str,
+    private_key: &fluxencrypt::keys::PrivateKey,
+    progress_callback: Box<dyn Fn(u64, u64) + Send + Sync>,
+) -> Result<u64, anyhow::Error> {
+    cipher
+        .decrypt_file(
+            input_path,
+            output_path,
+            private_key,
+            Some(progress_callback),
+        )
+        .map_err(|e| anyhow::anyhow!("Stream decryption failed: {}", e))
+}
+
+/// Finalize stream operation with results display
+fn finalize_stream_operation(
+    pb: ProgressBar,
+    start_time: Instant,
+    operation_name: &str,
+    bytes_processed: u64,
+    verbose: bool,
+    input_path: &str,
+    output_path: &str,
+) {
+    pb.finish_with_message(format!("{} completed!", operation_name));
+
+    let elapsed = start_time.elapsed();
+    display_operation_results(operation_name, bytes_processed, elapsed, verbose);
+
+    println!(
+        "{} Successfully {} {} to {}",
+        "✓".green().bold(),
+        if operation_name.contains("Encryption") {
+            "encrypted"
+        } else {
+            "decrypted"
+        },
+        input_path.cyan(),
+        output_path.cyan()
+    );
 }

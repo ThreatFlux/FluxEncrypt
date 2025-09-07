@@ -9,6 +9,59 @@ use fluxencrypt::keys::KeyPair;
 use fluxencrypt::{Config, HybridCipher};
 use proptest::prelude::*;
 
+// Helper structures for reducing parameter counts
+#[derive(Debug, Clone)]
+struct CryptoParams {
+    cipher_suite: CipherSuite,
+    rsa_key_size: RsaKeySize,
+}
+
+#[derive(Debug, Clone)]
+struct PerformanceParams {
+    memory_limit_mb: usize,
+    stream_chunk_size: usize,
+}
+
+#[derive(Debug, Clone)]
+struct FeatureParams {
+    hardware_acceleration: bool,
+    secure_memory: bool,
+}
+
+// Proptest strategies for the parameter groups
+fn config_crypto_params_strategy() -> impl Strategy<Value = CryptoParams> {
+    (
+        prop_oneof![Just(CipherSuite::Aes128Gcm), Just(CipherSuite::Aes256Gcm),],
+        prop_oneof![
+            Just(RsaKeySize::Rsa2048),
+            Just(RsaKeySize::Rsa3072),
+            Just(RsaKeySize::Rsa4096),
+        ],
+    )
+        .prop_map(|(cipher_suite, rsa_key_size)| CryptoParams {
+            cipher_suite,
+            rsa_key_size,
+        })
+}
+
+fn config_performance_params_strategy() -> impl Strategy<Value = PerformanceParams> {
+    (1..=2048usize, 1024..=65536usize).prop_map(|(memory_limit_mb, stream_chunk_size)| {
+        PerformanceParams {
+            memory_limit_mb,
+            stream_chunk_size,
+        }
+    })
+}
+
+fn config_feature_params_strategy() -> impl Strategy<Value = FeatureParams> {
+    (any::<bool>(), any::<bool>()).prop_map(|(hardware_acceleration, secure_memory)| {
+        FeatureParams {
+            hardware_acceleration,
+            secure_memory,
+        }
+    })
+}
+
 // Test that encryption is deterministic for same input with same key and nonce
 proptest! {
     #[test]
@@ -241,27 +294,17 @@ proptest! {
 proptest! {
     #[test]
     fn test_config_validation_properties(
-        cipher_suite in prop_oneof![
-            Just(CipherSuite::Aes128Gcm),
-            Just(CipherSuite::Aes256Gcm),
-        ],
-        rsa_key_size in prop_oneof![
-            Just(RsaKeySize::Rsa2048),
-            Just(RsaKeySize::Rsa3072),
-            Just(RsaKeySize::Rsa4096),
-        ],
-        memory_limit_mb in 1..=2048usize,
-        stream_chunk_size in 1024..=65536usize,
-        hardware_acceleration in any::<bool>(),
-        secure_memory in any::<bool>()
+        crypto_params in config_crypto_params_strategy(),
+        performance_params in config_performance_params_strategy(),
+        feature_params in config_feature_params_strategy()
     ) {
         let config = Config::builder()
-            .cipher_suite(cipher_suite)
-            .rsa_key_size(rsa_key_size)
-            .memory_limit_mb(memory_limit_mb)
-            .stream_chunk_size(stream_chunk_size)
-            .hardware_acceleration(hardware_acceleration)
-            .secure_memory(secure_memory)
+            .cipher_suite(crypto_params.cipher_suite)
+            .rsa_key_size(crypto_params.rsa_key_size)
+            .memory_limit_mb(performance_params.memory_limit_mb)
+            .stream_chunk_size(performance_params.stream_chunk_size)
+            .hardware_acceleration(feature_params.hardware_acceleration)
+            .secure_memory(feature_params.secure_memory)
             .build()
             .unwrap();
 
@@ -269,12 +312,12 @@ proptest! {
         prop_assert!(config.validate().is_ok());
 
         // Properties should be set correctly
-        prop_assert_eq!(config.cipher_suite, cipher_suite);
-        prop_assert_eq!(config.rsa_key_size, rsa_key_size);
-        prop_assert_eq!(config.memory_limit_mb, memory_limit_mb);
-        prop_assert_eq!(config.stream_chunk_size, stream_chunk_size);
-        prop_assert_eq!(config.hardware_acceleration, hardware_acceleration);
-        prop_assert_eq!(config.secure_memory, secure_memory);
+        prop_assert_eq!(config.cipher_suite, crypto_params.cipher_suite);
+        prop_assert_eq!(config.rsa_key_size, crypto_params.rsa_key_size);
+        prop_assert_eq!(config.memory_limit_mb, performance_params.memory_limit_mb);
+        prop_assert_eq!(config.stream_chunk_size, performance_params.stream_chunk_size);
+        prop_assert_eq!(config.hardware_acceleration, feature_params.hardware_acceleration);
+        prop_assert_eq!(config.secure_memory, feature_params.secure_memory);
     }
 }
 

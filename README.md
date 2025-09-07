@@ -1,8 +1,10 @@
 # FluxEncrypt
 
 [![CI](https://github.com/ThreatFlux/fluxencrypt/workflows/CI/badge.svg)](https://github.com/ThreatFlux/fluxencrypt/actions)
-[![Security Audit](https://github.com/ThreatFlux/fluxencrypt/workflows/Security/badge.svg)](https://github.com/ThreatFlux/fluxencrypt/actions)
+[![Security Audit](https://github.com/ThreatFlux/FluxEncrypt/actions/workflows/security.yml/badge.svg)](https://github.com/ThreatFlux/FluxEncrypt/actions/workflows/security.yml)
 [![Crates.io](https://img.shields.io/crates/v/fluxencrypt.svg)](https://crates.io/crates/fluxencrypt)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/f7735393ff1e4afab40895af059ad36b)](https://app.codacy.com/gh/ThreatFlux/FluxEncrypt/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
+[![codecov](https://codecov.io/gh/ThreatFlux/FluxEncrypt/graph/badge.svg?token=4xESkaVrry)](https://codecov.io/gh/ThreatFlux/FluxEncrypt)
 [![Documentation](https://docs.rs/fluxencrypt/badge.svg)](https://docs.rs/fluxencrypt)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -21,8 +23,9 @@ A high-performance, secure encryption SDK for Rust applications, providing both 
 ### 🔐 Core Encryption
 - **Hybrid Encryption**: Combines RSA-OAEP and AES-GCM for optimal security and performance
 - **AES-256-GCM**: Fast symmetric encryption with authenticated encryption
-- **RSA-OAEP**: Secure asymmetric encryption with optimal padding
+- **RSA-OAEP**: Secure asymmetric encryption with optimal padding (4096-bit keys by default)
 - **Key Derivation**: PBKDF2 and Argon2 support for secure key generation
+- **Base64 Encoding**: Default base64 output for easy handling in text environments
 
 ### 🚀 Performance
 - **Stream Processing**: Handle large files and data streams efficiently
@@ -33,6 +36,8 @@ A high-performance, secure encryption SDK for Rust applications, providing both 
 ### 🔧 Developer Experience
 - **Simple API**: Intuitive interface for common use cases
 - **Flexible Configuration**: Customizable security parameters
+- **String Data Support**: Direct encryption/decryption of string data via CLI
+- **Multiple Output Formats**: Base64 (default) and raw binary output options
 - **Comprehensive Examples**: Ready-to-use code samples
 - **Excellent Documentation**: Detailed guides and API references
 
@@ -55,13 +60,13 @@ Add FluxEncrypt to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-fluxencrypt = "0.1.0"
+fluxencrypt = "0.1.3"
 
 # For async support
-fluxencrypt-async = "0.1.0"
+fluxencrypt-async = "0.1.3"
 
 # For CLI usage
-fluxencrypt-cli = "0.1.0"
+fluxencrypt-cli = "0.1.3"
 ```
 
 ### Basic Usage
@@ -70,8 +75,8 @@ fluxencrypt-cli = "0.1.0"
 use fluxencrypt::{Config, HybridCipher};
 use fluxencrypt::keys::KeyPair;
 
-// Generate a new key pair
-let keypair = KeyPair::generate(2048)?;
+// Generate a new key pair (default 4096-bit)
+let keypair = KeyPair::generate(4096)?;
 
 // Create cipher with default configuration
 let cipher = HybridCipher::new(Config::default());
@@ -141,14 +146,29 @@ FluxEncrypt includes a powerful CLI for file encryption operations:
 # Install the CLI
 cargo install fluxencrypt-cli
 
-# Generate a new key pair
+# Generate a new key pair (4096-bit RSA by default)
 fluxencrypt-cli keygen --output-dir ./keys
+
+# Generate keys in base64 format
+fluxencrypt-cli keygen --output-dir ./keys --base64
 
 # Encrypt a file
 fluxencrypt-cli encrypt --key ./keys/fluxencrypt_key.pub --input document.pdf --output document.pdf.enc
 
+# Encrypt string data directly (outputs base64 by default)
+fluxencrypt-cli encrypt --key ./keys/fluxencrypt_key.pub --data "Hello, World!"
+
+# Encrypt with raw binary output
+fluxencrypt-cli encrypt --key ./keys/fluxencrypt_key.pub --input document.pdf --output document.pdf.enc --raw
+
 # Decrypt a file  
 fluxencrypt-cli decrypt --key ./keys/fluxencrypt_key.pem --input document.pdf.enc --output document.pdf
+
+# Decrypt base64 string data directly
+fluxencrypt-cli decrypt --key ./keys/fluxencrypt_key.pem --data "base64encodeddata..."
+
+# Decrypt raw binary input
+fluxencrypt-cli decrypt --key ./keys/fluxencrypt_key.pem --input document.pdf.enc --raw
 
 # Batch encrypt multiple files
 fluxencrypt-cli batch-encrypt --key ./keys/fluxencrypt_key.pub --input-dir ./documents --output-dir ./encrypted
@@ -180,7 +200,7 @@ let config = Config::builder()
 FluxEncrypt is designed for high performance:
 
 - **AES-256-GCM**: 2.5+ GB/s throughput on modern hardware
-- **RSA-2048**: 1000+ operations/sec for key operations
+- **RSA-4096**: 500+ operations/sec for key operations (enhanced security)
 - **Hybrid Mode**: Optimal balance of security and speed
 - **Stream Processing**: Constant memory usage regardless of file size
 
@@ -222,15 +242,14 @@ fluxencrypt/
 
 ## Examples
 
-The `examples/` directory contains comprehensive examples:
+The `fluxencrypt/examples/` directory contains comprehensive examples:
 
-- `basic_encryption.rs` - Simple encrypt/decrypt operations
-- `file_encryption.rs` - File-based encryption
-- `stream_processing.rs` - Large data stream handling  
-- `async_operations.rs` - Async encryption patterns
-- `key_management.rs` - Key generation and storage
-- `batch_processing.rs` - Multiple file operations
+- `basic_encryption.rs` - Simple encrypt/decrypt operations with 4096-bit keys
+- `file_encryption.rs` - File-based encryption with streaming
+- `key_management.rs` - Key generation, storage, and base64 handling
 - `environment_config.rs` - Environment-based configuration
+
+**Note**: Examples use 2048-bit keys for demonstration purposes. Production use should prefer 4096-bit keys (CLI default).
 
 ## Contributing
 

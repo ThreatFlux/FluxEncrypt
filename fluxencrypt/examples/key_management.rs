@@ -15,8 +15,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = tempdir()?;
     let base_path = temp_dir.path();
 
-    // Generate and save key pair
-    let keypair = KeyPair::generate(2048)?;
+    // Generate and save key pair (using 4096-bit for production security)
+    let keypair = KeyPair::generate(4096)?;
     let storage = KeyStorage::new();
 
     let public_path = base_path.join("example_key.pub");

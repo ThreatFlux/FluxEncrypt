@@ -36,52 +36,69 @@ pub fn create_output_directory(path: &Path) -> CommandResult {
 /// # Returns
 /// The loaded public key
 pub fn load_public_key(key_path: Option<&str>) -> anyhow::Result<PublicKey> {
-    let key_data = if let Some(path) = key_path {
-        // Load from file
-        fs::read(path)
-            .map_err(|e| anyhow::anyhow!("Failed to read public key file '{}': {}", path, e))?
+    let key_data = load_key_data(key_path, "FLUXENCRYPT_PUBLIC_KEY", "public key")?;
+    let decoded_data = decode_key_data_if_needed(&key_data)?;
+    parse_public_key(&decoded_data)
+}
+
+fn load_key_data(key_path: Option<&str>, env_var: &str, key_type: &str) -> anyhow::Result<Vec<u8>> {
+    match key_path {
+        Some(path) => read_key_from_file(path),
+        None => load_key_from_env(env_var, key_type),
+    }
+}
+
+fn read_key_from_file(path: &str) -> anyhow::Result<Vec<u8>> {
+    fs::read(path).map_err(|e| anyhow::anyhow!("Failed to read key file '{}': {}", path, e))
+}
+
+fn load_key_from_env(env_var: &str, key_type: &str) -> anyhow::Result<Vec<u8>> {
+    let env_key = env::var(env_var).map_err(|_| {
+        anyhow::anyhow!(
+            "No {} file specified and {} environment variable not set",
+            key_type,
+            env_var
+        )
+    })?;
+
+    if is_direct_key_data(&env_key) {
+        Ok(env_key.into_bytes())
     } else {
-        // Try loading from environment variable
-        let env_key = env::var("FLUXENCRYPT_PUBLIC_KEY")
-            .map_err(|_| anyhow::anyhow!("No public key file specified and FLUXENCRYPT_PUBLIC_KEY environment variable not set"))?;
+        read_key_from_env_file(&env_key)
+    }
+}
 
-        // Check if it's a file path or actual key data
-        if env_key.starts_with("-----BEGIN") || env_key.contains("\n") {
-            // Direct key data
-            env_key.into_bytes()
-        } else {
-            // File path
-            fs::read(&env_key).map_err(|e| {
-                anyhow::anyhow!(
-                    "Failed to read public key file from env var '{}': {}",
-                    env_key,
-                    e
-                )
-            })?
-        }
-    };
+fn is_direct_key_data(data: &str) -> bool {
+    data.starts_with("-----BEGIN") || data.contains('\n')
+}
 
+fn read_key_from_env_file(env_key: &str) -> anyhow::Result<Vec<u8>> {
+    fs::read(env_key)
+        .map_err(|e| anyhow::anyhow!("Failed to read key file from env var '{}': {}", env_key, e))
+}
+
+fn decode_key_data_if_needed(key_data: &[u8]) -> anyhow::Result<Vec<u8>> {
+    if key_data.starts_with(b"-----BEGIN") {
+        return Ok(key_data.to_vec());
+    }
+
+    // Try to decode as base64
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    match STANDARD.decode(key_data) {
+        Ok(decoded) => Ok(decoded),
+        Err(_) => Ok(key_data.to_vec()), // Not base64, use as-is
+    }
+}
+
+fn parse_public_key(decoded_data: &[u8]) -> anyhow::Result<PublicKey> {
     let parser = KeyParser::new();
 
-    // Check if the data is base64 encoded
-    let decoded_data = if !key_data.starts_with(b"-----BEGIN") {
-        // Try to decode as base64
-        use base64::{engine::general_purpose::STANDARD, Engine as _};
-        match STANDARD.decode(&key_data) {
-            Ok(decoded) => decoded,
-            Err(_) => key_data, // Not base64, use as-is
-        }
-    } else {
-        key_data
-    };
-
-    // Try to detect the format
     let format = parser
-        .detect_format(&decoded_data)
+        .detect_format(decoded_data)
         .ok_or_else(|| anyhow::anyhow!("Could not detect public key format"))?;
 
     parser
-        .parse_public_key(&decoded_data, format)
+        .parse_public_key(decoded_data, format)
         .map_err(|e| anyhow::anyhow!("Failed to parse public key: {}", e))
 }
 
@@ -97,60 +114,45 @@ pub fn load_private_key(
     key_path: Option<&str>,
     password: Option<&str>,
 ) -> anyhow::Result<PrivateKey> {
-    let key_data = if let Some(path) = key_path {
-        // Load from file
-        fs::read(path)
-            .map_err(|e| anyhow::anyhow!("Failed to read private key file '{}': {}", path, e))?
-    } else {
-        // Try loading from environment variable
-        let env_key = env::var("FLUXENCRYPT_PRIVATE_KEY")
-            .map_err(|_| anyhow::anyhow!("No private key file specified and FLUXENCRYPT_PRIVATE_KEY environment variable not set"))?;
+    let key_data = load_key_data(key_path, "FLUXENCRYPT_PRIVATE_KEY", "private key")?;
+    let decoded_data = decode_key_data_if_needed(&key_data)?;
+    let key_str = convert_key_data_to_string(&decoded_data)?;
 
-        // Check if it's a file path or actual key data
-        if env_key.starts_with("-----BEGIN") || env_key.contains("\n") {
-            // Direct key data
-            env_key.into_bytes()
-        } else {
-            // File path
-            fs::read(&env_key).map_err(|e| {
-                anyhow::anyhow!(
-                    "Failed to read private key file from env var '{}': {}",
-                    env_key,
-                    e
-                )
-            })?
-        }
-    };
+    validate_encryption_password(&key_str, password)?;
+    parse_private_key(&key_str, password)
+}
 
-    // Check if the data is base64 encoded
-    let decoded_data = if !key_data.starts_with(b"-----BEGIN") {
-        // Try to decode as base64
-        use base64::{engine::general_purpose::STANDARD, Engine as _};
-        match STANDARD.decode(&key_data) {
-            Ok(decoded) => decoded,
-            Err(_) => key_data, // Not base64, use as-is
-        }
-    } else {
-        key_data
-    };
+fn convert_key_data_to_string(decoded_data: &[u8]) -> anyhow::Result<String> {
+    String::from_utf8(decoded_data.to_vec())
+        .map_err(|e| anyhow::anyhow!("Private key data is not valid UTF-8: {}", e))
+}
 
-    let key_str = String::from_utf8(decoded_data)
-        .map_err(|e| anyhow::anyhow!("Private key data is not valid UTF-8: {}", e))?;
-
-    // Check if the key is encrypted
-    if key_str.contains("ENCRYPTED") && password.is_none() {
+fn validate_encryption_password(key_str: &str, password: Option<&str>) -> anyhow::Result<()> {
+    if is_encrypted_key(key_str) && password.is_none() {
         return Err(anyhow::anyhow!(
             "Private key is encrypted but no password provided"
         ));
     }
+    Ok(())
+}
 
-    if let Some(pwd) = password {
-        // Try to parse as encrypted key
-        fluxencrypt::keys::parsing::parse_encrypted_private_key_from_str(&key_str, pwd)
-            .map_err(|e| anyhow::anyhow!("Failed to parse encrypted private key: {}", e))
-    } else {
-        // Parse as regular key
-        fluxencrypt::keys::parsing::parse_private_key_from_str(&key_str)
-            .map_err(|e| anyhow::anyhow!("Failed to parse private key: {}", e))
+fn is_encrypted_key(key_str: &str) -> bool {
+    key_str.contains("ENCRYPTED")
+}
+
+fn parse_private_key(key_str: &str, password: Option<&str>) -> anyhow::Result<PrivateKey> {
+    match password {
+        Some(pwd) => parse_encrypted_private_key(key_str, pwd),
+        None => parse_unencrypted_private_key(key_str),
     }
+}
+
+fn parse_encrypted_private_key(key_str: &str, password: &str) -> anyhow::Result<PrivateKey> {
+    fluxencrypt::keys::parsing::parse_encrypted_private_key_from_str(key_str, password)
+        .map_err(|e| anyhow::anyhow!("Failed to parse encrypted private key: {}", e))
+}
+
+fn parse_unencrypted_private_key(key_str: &str) -> anyhow::Result<PrivateKey> {
+    fluxencrypt::keys::parsing::parse_private_key_from_str(key_str)
+        .map_err(|e| anyhow::anyhow!("Failed to parse private key: {}", e))
 }

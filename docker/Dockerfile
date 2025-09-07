@@ -4,11 +4,12 @@
 # Build stage
 FROM rust:1.75-slim as builder
 
-# Install build dependencies
-RUN apt-get update && apt-get install -y \
-    pkg-config \
-    libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Install build dependencies with pinned versions and security best practices
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config=1.8.1-1 \
+    libssl-dev=3.0.11-1~deb12u2 \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
 # Set working directory
 WORKDIR /usr/src/fluxencrypt
@@ -38,11 +39,12 @@ RUN cargo build --release --bin fluxencrypt-cli
 # Runtime stage
 FROM debian:bookworm-slim
 
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y \
-    ca-certificates \
-    libssl3 \
+# Install runtime dependencies with pinned versions and security best practices
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates=20230311 \
+    libssl3=3.0.11-1~deb12u2 \
     && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean \
     && useradd -r -s /bin/false fluxencrypt
 
 # Copy the binary from builder stage

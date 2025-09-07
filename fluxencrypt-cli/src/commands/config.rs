@@ -87,29 +87,46 @@ fn show_config() -> CommandResult {
     println!("{} FluxEncrypt Configuration:", "⚙️".blue().bold());
 
     let config_path = get_config_path();
-
     if !config_path.exists() {
-        println!(
-            "{} No configuration file found at {}",
-            "⚠".yellow(),
-            config_path.display().to_string().dimmed()
-        );
-        println!(
-            "{} Run 'fluxencrypt-cli config init' to create one",
-            "💡".cyan()
-        );
+        display_no_config_message(&config_path);
         return Ok(());
     }
 
     let config = load_config()?;
+    display_config_file_path(&config_path);
+    display_all_config_sections(&config);
 
+    Ok(())
+}
+
+fn display_no_config_message(config_path: &Path) {
+    println!(
+        "{} No configuration file found at {}",
+        "⚠".yellow(),
+        config_path.display().to_string().dimmed()
+    );
+    println!(
+        "{} Run 'fluxencrypt-cli config init' to create one",
+        "💡".cyan()
+    );
+}
+
+fn display_config_file_path(config_path: &Path) {
     println!(
         "{} Configuration file: {}",
         "📁".blue(),
         config_path.display().to_string().cyan()
     );
     println!();
+}
 
+fn display_all_config_sections(config: &FluxEncryptConfig) {
+    display_key_paths_section(config);
+    display_directories_section(config);
+    display_processing_options_section(config);
+}
+
+fn display_key_paths_section(config: &FluxEncryptConfig) {
     display_config_section(
         "Key Paths",
         &[
@@ -117,7 +134,9 @@ fn show_config() -> CommandResult {
             ("Default private key", &config.default_private_key),
         ],
     );
+}
 
+fn display_directories_section(config: &FluxEncryptConfig) {
     display_config_section(
         "Directories",
         &[
@@ -125,181 +144,193 @@ fn show_config() -> CommandResult {
             ("Default file pattern", &config.default_pattern),
         ],
     );
+}
 
+fn display_processing_options_section(config: &FluxEncryptConfig) {
     display_config_section("Processing Options", &[]);
-    if let Some(chunk_size) = config.default_chunk_size {
+
+    display_chunk_size_option(config.default_chunk_size);
+    display_boolean_option(
+        "🚀",
+        "Use parallel processing",
+        config.use_parallel,
+        "purple",
+    );
+    display_boolean_option(
+        "🔄",
+        "Continue on error",
+        config.continue_on_error,
+        "yellow",
+    );
+    display_boolean_option(
+        "📂",
+        "Preserve directory structure",
+        config.preserve_structure,
+        "blue",
+    );
+    display_boolean_option("📝", "Verbose output", config.verbose, "cyan");
+}
+
+fn display_chunk_size_option(chunk_size: Option<usize>) {
+    if let Some(size) = chunk_size {
         println!(
             "  {} Default chunk size: {}",
             "🔢".blue(),
-            format_bytes(chunk_size as u64).cyan()
+            format_bytes(size as u64).cyan()
         );
     }
-    if let Some(use_parallel) = config.use_parallel {
-        println!(
-            "  {} Use parallel processing: {}",
-            "🚀".purple(),
-            format_bool(use_parallel)
-        );
-    }
-    if let Some(continue_on_error) = config.continue_on_error {
-        println!(
-            "  {} Continue on error: {}",
-            "🔄".yellow(),
-            format_bool(continue_on_error)
-        );
-    }
-    if let Some(preserve_structure) = config.preserve_structure {
-        println!(
-            "  {} Preserve directory structure: {}",
-            "📂".blue(),
-            format_bool(preserve_structure)
-        );
-    }
-    if let Some(verbose) = config.verbose {
-        println!("  {} Verbose output: {}", "📝".cyan(), format_bool(verbose));
-    }
+}
 
-    Ok(())
+fn display_boolean_option(icon: &str, label: &str, value: Option<bool>, color: &str) {
+    if let Some(val) = value {
+        let formatted_value = format_bool(val);
+        let colored_icon = match color {
+            "purple" => icon.purple(),
+            "yellow" => icon.yellow(),
+            "blue" => icon.blue(),
+            "cyan" => icon.cyan(),
+            _ => icon.normal(),
+        };
+        println!("  {} {}: {}", colored_icon, label, formatted_value);
+    }
 }
 
 fn set_config(key: &str, value: &str) -> CommandResult {
     let mut config = load_config().unwrap_or_default();
 
+    update_config_value(&mut config, key, value)?;
+    save_config(&config)?;
+    display_config_set_success(key, value);
+
+    Ok(())
+}
+
+fn update_config_value(config: &mut FluxEncryptConfig, key: &str, value: &str) -> CommandResult {
     match key {
         "default_public_key" | "public_key" => {
-            let path = Path::new(value);
-            if !path.exists() {
-                println!(
-                    "{} Warning: Public key file does not exist: {}",
-                    "⚠".yellow(),
-                    value.red()
-                );
-            }
+            validate_key_file_path(value, "Public");
             config.default_public_key = Some(value.to_string());
         }
         "default_private_key" | "private_key" => {
-            let path = Path::new(value);
-            if !path.exists() {
-                println!(
-                    "{} Warning: Private key file does not exist: {}",
-                    "⚠".yellow(),
-                    value.red()
-                );
-            }
+            validate_key_file_path(value, "Private");
             config.default_private_key = Some(value.to_string());
         }
         "default_output_dir" | "output_dir" => {
             config.default_output_dir = Some(value.to_string());
         }
         "default_chunk_size" | "chunk_size" => {
-            let chunk_size: usize = value
-                .parse()
-                .map_err(|_| anyhow::anyhow!("Invalid chunk size: {}", value))?;
-            if chunk_size < 1024 {
-                return Err(anyhow::anyhow!("Chunk size must be at least 1024 bytes"));
-            }
-            config.default_chunk_size = Some(chunk_size);
+            config.default_chunk_size = Some(parse_and_validate_chunk_size(value)?);
         }
         "use_parallel" | "parallel" => {
-            let use_parallel = parse_bool(value)?;
-            config.use_parallel = Some(use_parallel);
+            config.use_parallel = Some(parse_bool(value)?);
         }
         "continue_on_error" => {
-            let continue_on_error = parse_bool(value)?;
-            config.continue_on_error = Some(continue_on_error);
+            config.continue_on_error = Some(parse_bool(value)?);
         }
         "default_pattern" | "pattern" => {
             config.default_pattern = Some(value.to_string());
         }
         "preserve_structure" => {
-            let preserve_structure = parse_bool(value)?;
-            config.preserve_structure = Some(preserve_structure);
+            config.preserve_structure = Some(parse_bool(value)?);
         }
         "verbose" => {
-            let verbose = parse_bool(value)?;
-            config.verbose = Some(verbose);
+            config.verbose = Some(parse_bool(value)?);
         }
         _ => {
             return Err(anyhow::anyhow!("Unknown configuration key: {}", key));
         }
     }
+    Ok(())
+}
 
-    save_config(&config)?;
+fn validate_key_file_path(path_str: &str, key_type: &str) {
+    let path = Path::new(path_str);
+    if !path.exists() {
+        println!(
+            "{} Warning: {} key file does not exist: {}",
+            "⚠".yellow(),
+            key_type,
+            path_str.red()
+        );
+    }
+}
 
+fn parse_and_validate_chunk_size(value: &str) -> anyhow::Result<usize> {
+    let chunk_size: usize = value
+        .parse()
+        .map_err(|_| anyhow::anyhow!("Invalid chunk size: {}", value))?;
+
+    if chunk_size < 1024 {
+        return Err(anyhow::anyhow!("Chunk size must be at least 1024 bytes"));
+    }
+
+    Ok(chunk_size)
+}
+
+fn display_config_set_success(key: &str, value: &str) {
     println!(
         "{} Set {} = {}",
         "✓".green().bold(),
         key.cyan(),
         value.yellow()
     );
-
-    Ok(())
 }
 
 fn get_config(key: &str) -> CommandResult {
     let config = load_config().unwrap_or_default();
 
-    let value = match key {
-        "default_public_key" | "public_key" => config.default_public_key.as_deref(),
-        "default_private_key" | "private_key" => config.default_private_key.as_deref(),
-        "default_output_dir" | "output_dir" => config.default_output_dir.as_deref(),
-        "default_pattern" | "pattern" => config.default_pattern.as_deref(),
+    match key {
+        "default_public_key" | "public_key" => {
+            print_string_config_value(&config.default_public_key, key)
+        }
+        "default_private_key" | "private_key" => {
+            print_string_config_value(&config.default_private_key, key)
+        }
+        "default_output_dir" | "output_dir" => {
+            print_string_config_value(&config.default_output_dir, key)
+        }
+        "default_pattern" | "pattern" => print_string_config_value(&config.default_pattern, key),
         "default_chunk_size" | "chunk_size" => {
-            if let Some(size) = config.default_chunk_size {
-                println!("{}", size);
-                return Ok(());
-            } else {
-                None
-            }
+            print_numeric_config_value(config.default_chunk_size, key)
         }
-        "use_parallel" | "parallel" => {
-            if let Some(parallel) = config.use_parallel {
-                println!("{}", parallel);
-                return Ok(());
-            } else {
-                None
-            }
-        }
-        "continue_on_error" => {
-            if let Some(continue_on_error) = config.continue_on_error {
-                println!("{}", continue_on_error);
-                return Ok(());
-            } else {
-                None
-            }
-        }
-        "preserve_structure" => {
-            if let Some(preserve) = config.preserve_structure {
-                println!("{}", preserve);
-                return Ok(());
-            } else {
-                None
-            }
-        }
-        "verbose" => {
-            if let Some(verbose) = config.verbose {
-                println!("{}", verbose);
-                return Ok(());
-            } else {
-                None
-            }
-        }
-        _ => {
-            return Err(anyhow::anyhow!("Unknown configuration key: {}", key));
-        }
-    };
-
-    if let Some(value) = value {
-        println!("{}", value);
-    } else {
-        println!(
-            "{} Configuration key '{}' is not set",
-            "⚠".yellow(),
-            key.red()
-        );
+        "use_parallel" | "parallel" => print_bool_config_value(config.use_parallel, key),
+        "continue_on_error" => print_bool_config_value(config.continue_on_error, key),
+        "preserve_structure" => print_bool_config_value(config.preserve_structure, key),
+        "verbose" => print_bool_config_value(config.verbose, key),
+        _ => Err(anyhow::anyhow!("Unknown configuration key: {}", key)),
     }
+}
 
+fn print_string_config_value(value: &Option<String>, key: &str) -> CommandResult {
+    match value {
+        Some(val) => println!("{}", val),
+        None => print_config_not_set_message(key),
+    }
     Ok(())
+}
+
+fn print_numeric_config_value<T: std::fmt::Display>(value: Option<T>, key: &str) -> CommandResult {
+    match value {
+        Some(val) => println!("{}", val),
+        None => print_config_not_set_message(key),
+    }
+    Ok(())
+}
+
+fn print_bool_config_value(value: Option<bool>, key: &str) -> CommandResult {
+    match value {
+        Some(val) => println!("{}", val),
+        None => print_config_not_set_message(key),
+    }
+    Ok(())
+}
+
+fn print_config_not_set_message(key: &str) {
+    println!(
+        "{} Configuration key '{}' is not set",
+        "⚠".yellow(),
+        key.red()
+    );
 }
 
 fn reset_config() -> CommandResult {
