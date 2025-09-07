@@ -182,6 +182,13 @@ jobs:
         head -20 benchmark_output.txt
         echo "File size:"
         wc -l benchmark_output.txt
+    - name: Clean git state before benchmark action
+      run: |
+        # Stash only Cargo.lock changes made during benchmark run
+        if ! git diff --quiet -- Cargo.lock; then
+          echo "Stashing Cargo.lock changes before benchmark action..."
+          git stash push Cargo.lock -m "Temporary stash of Cargo.lock changes from benchmark"
+        fi
     - name: Store benchmark result
       uses: benchmark-action/github-action-benchmark@4bdcce38c94cec68da58d012ac24b7b1155efe8b
       with:

@@ -1,7 +1,7 @@
-.PHONY: all fmt clippy build test clean
+.PHONY: all fmt clippy build test bench clean
 
 # Default target - run all checks
-all: fmt clippy build test
+all: fmt clippy build test bench
 	@echo "All checks passed!"
 
 # Format code
@@ -23,6 +23,11 @@ build:
 test:
 	@echo "Running tests..."
 	@PROPTEST_CASES=8 cargo test --workspace --all-features --release
+
+# Run benchmarks
+bench:
+	@echo "Running benchmarks..."
+	@cargo bench --bench encryption_benchmarks
 
 # Clean build artifacts
 clean:
