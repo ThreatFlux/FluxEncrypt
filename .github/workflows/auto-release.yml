@@ -503,10 +503,13 @@ jobs:
         run: |
           # Use cargo-workspaces to publish in dependency order
           # Note: --allow-dirty and --no-verify prevent "already published" errors
+          # --no-git-push prevents git operations, --allow-branch allows any branch
           cargo workspaces publish \
             --yes \
             --no-verify \
             --allow-dirty \
+            --no-git-push \
+            --allow-branch temp-publish-branch \
             --token $CARGO_REGISTRY_TOKEN || echo "Some packages may have already been published"
 
   # Build and publish Docker images
