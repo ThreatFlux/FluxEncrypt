@@ -14,7 +14,7 @@ description = "Async/await support for FluxEncrypt encryption SDK"
 
 [dependencies]
 # Core FluxEncrypt library
-fluxencrypt = { version = "0.3.4", path = "../fluxencrypt", features = ["serde"] }
+fluxencrypt = { version = "0.3.5", path = "../fluxencrypt", features = ["serde"] }
 
 # Async runtime
 tokio = { workspace = true }
