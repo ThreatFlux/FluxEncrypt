@@ -4,9 +4,9 @@
 *.pdb
 
 # Cargo
-Cargo.lock
-# Keep Cargo.lock for binary crates
-# Remove the line above if this is a binary crate
+# Cargo.lock - keeping this file since we have binary crates (fluxencrypt-cli)
+# Uncomment the line below if you want to ignore it for library-only crates
+# Cargo.lock
 
 # IDE and Editor files
 .idea/
