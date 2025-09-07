@@ -183,7 +183,7 @@ jobs:
         echo "File size:"
         wc -l benchmark_output.txt
     - name: Store benchmark result
-      uses: benchmark-action/github-action-benchmark@2e6f4e33d6695578ee68981a04100aa77e0ac037
+      uses: benchmark-action/github-action-benchmark@4bdcce38c94cec68da58d012ac24b7b1155efe8b
       with:
         tool: 'cargo'
         output-file-path: benchmark_output.txt
