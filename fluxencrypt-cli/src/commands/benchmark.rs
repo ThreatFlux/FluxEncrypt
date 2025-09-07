@@ -65,22 +65,48 @@ impl SecureTempFiles {
         let pid = process::id();
         let unique_id = format!("fluxencrypt_bench_{}_{}_{}", pid, timestamp, iteration);
 
-        let temp_dir = std::env::temp_dir().join(unique_id);
-        fs::create_dir_all(&temp_dir)?;
-
-        // Set secure permissions (Unix only)
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(&temp_dir)?.permissions();
-            perms.set_mode(0o700);
-            fs::set_permissions(&temp_dir, perms)?;
-        }
+        // Use a more secure approach to create temporary directory
+        let temp_dir = Self::create_secure_temp_dir(&unique_id)?;
 
         Ok(Self {
             input_path: temp_dir.join("input.dat"),
             output_path: temp_dir.join("output.enc"),
         })
+    }
+
+    /// Creates a secure temporary directory with proper permissions and ownership
+    fn create_secure_temp_dir(unique_id: &str) -> anyhow::Result<std::path::PathBuf> {
+        // Try to use XDG runtime directory first (Linux/Unix), fallback to system temp
+        let base_dir = std::env::var("XDG_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .or_else(|_: std::env::VarError| {
+                // Fallback to creating our own secure directory
+                #[cfg(unix)]
+                {
+                    Ok::<std::path::PathBuf, std::env::VarError>(std::path::PathBuf::from("/tmp"))
+                }
+                #[cfg(not(unix))]
+                {
+                    Ok::<std::path::PathBuf, std::env::VarError>(std::env::temp_dir())
+                }
+            })?;
+
+        let temp_dir = base_dir.join(unique_id);
+
+        // Create directory with secure permissions from the start
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            let mut builder = fs::DirBuilder::new();
+            builder.mode(0o700);
+            builder.create(&temp_dir)?;
+        }
+        #[cfg(not(unix))]
+        {
+            fs::create_dir_all(&temp_dir)?;
+        }
+
+        Ok(temp_dir)
     }
 }
 
@@ -192,47 +218,100 @@ fn run_benchmarks(
         let (private_key, public_key) = key_pairs.get(&key_size).unwrap();
         println!("{} Testing {}-bit keys:", "🧪".magenta().bold(), key_size);
 
-        for &size_kb in &cmd.sizes {
-            let test_data = generate_test_data(size_kb * 1024);
-
-            if !cmd.decrypt_only {
-                results.push(benchmark_hybrid_encrypt(
-                    &test_data,
-                    public_key,
-                    key_size,
-                    size_kb,
-                    cmd.iterations,
-                    cmd.verbose,
-                )?);
-
-                if cmd.compare_modes && size_kb >= 1000 {
-                    results.push(benchmark_stream_encrypt(
-                        &test_data,
-                        public_key,
-                        key_size,
-                        size_kb,
-                        cmd.iterations,
-                        cmd.verbose,
-                    )?);
-                }
-            }
-
-            if !cmd.encrypt_only {
-                let cryptum = cryptum()?;
-                let encrypted_data = cryptum.encrypt(public_key, &test_data)?;
-                results.push(benchmark_decrypt(
-                    &encrypted_data,
-                    private_key,
-                    key_size,
-                    size_kb,
-                    cmd.iterations,
-                    cmd.verbose,
-                )?);
-            }
-        }
+        run_key_size_benchmarks(cmd, private_key, public_key, key_size, &mut results)?;
         println!();
     }
     Ok(results)
+}
+
+fn run_key_size_benchmarks(
+    cmd: &BenchmarkCommand,
+    private_key: &PrivateKey,
+    public_key: &PublicKey,
+    key_size: u16,
+    results: &mut Vec<BenchmarkResult>,
+) -> anyhow::Result<()> {
+    for &size_kb in &cmd.sizes {
+        let test_data = generate_test_data(size_kb * 1024);
+
+        run_encryption_benchmarks(cmd, &test_data, public_key, key_size, size_kb, results)?;
+        run_decryption_benchmarks(
+            cmd,
+            &test_data,
+            private_key,
+            public_key,
+            key_size,
+            size_kb,
+            results,
+        )?;
+    }
+    Ok(())
+}
+
+fn run_encryption_benchmarks(
+    cmd: &BenchmarkCommand,
+    test_data: &[u8],
+    public_key: &PublicKey,
+    key_size: u16,
+    size_kb: usize,
+    results: &mut Vec<BenchmarkResult>,
+) -> anyhow::Result<()> {
+    if cmd.decrypt_only {
+        return Ok(());
+    }
+
+    results.push(benchmark_hybrid_encrypt(
+        test_data,
+        public_key,
+        key_size,
+        size_kb,
+        cmd.iterations,
+        cmd.verbose,
+    )?);
+
+    if should_run_stream_encrypt(cmd, size_kb) {
+        results.push(benchmark_stream_encrypt(
+            test_data,
+            public_key,
+            key_size,
+            size_kb,
+            cmd.iterations,
+            cmd.verbose,
+        )?);
+    }
+
+    Ok(())
+}
+
+fn run_decryption_benchmarks(
+    cmd: &BenchmarkCommand,
+    test_data: &[u8],
+    private_key: &PrivateKey,
+    public_key: &PublicKey,
+    key_size: u16,
+    size_kb: usize,
+    results: &mut Vec<BenchmarkResult>,
+) -> anyhow::Result<()> {
+    if cmd.encrypt_only {
+        return Ok(());
+    }
+
+    let cryptum = cryptum()?;
+    let encrypted_data = cryptum.encrypt(public_key, test_data)?;
+    results.push(benchmark_decrypt(
+        &encrypted_data,
+        private_key,
+        key_size,
+        size_kb,
+        cmd.iterations,
+        cmd.verbose,
+    )?);
+
+    Ok(())
+}
+
+fn should_run_stream_encrypt(cmd: &BenchmarkCommand, size_kb: usize) -> bool {
+    cmd.compare_modes && size_kb >= 1000
 }
 
 fn benchmark_hybrid_encrypt(
@@ -393,93 +472,138 @@ fn generate_test_data(size: usize) -> Vec<u8> {
 
 fn display_results(results: &[BenchmarkResult], verbose: bool) {
     println!("{} Benchmark Results:", "📊".blue().bold());
-    let grouped: HashMap<(&String, u16), Vec<&BenchmarkResult>> =
-        results.iter().fold(HashMap::new(), |mut acc, result| {
-            acc.entry((&result.operation, result.key_size))
-                .or_default()
-                .push(result);
-            acc
-        });
+    let grouped = group_results_by_operation_and_key_size(results);
 
+    display_grouped_results(&grouped, verbose);
+    display_summary(results);
+}
+
+fn group_results_by_operation_and_key_size(
+    results: &[BenchmarkResult],
+) -> HashMap<(&String, u16), Vec<&BenchmarkResult>> {
+    results.iter().fold(HashMap::new(), |mut acc, result| {
+        acc.entry((&result.operation, result.key_size))
+            .or_default()
+            .push(result);
+        acc
+    })
+}
+
+fn display_grouped_results(
+    grouped: &HashMap<(&String, u16), Vec<&BenchmarkResult>>,
+    verbose: bool,
+) {
     for ((operation, key_size), group) in grouped {
+        display_operation_group(operation, *key_size, group, verbose);
+    }
+}
+
+fn display_operation_group(
+    operation: &str,
+    key_size: u16,
+    group: &[&BenchmarkResult],
+    verbose: bool,
+) {
+    println!(
+        "\n{} {} ({}-bit key):",
+        "🔧".cyan().bold(),
+        operation,
+        key_size
+    );
+
+    print_table_header(verbose);
+
+    let mut sorted_group = group.to_vec();
+    sorted_group.sort_by_key(|r| r.data_size_kb);
+
+    for result in sorted_group {
+        print_result_row(result, verbose);
+    }
+}
+
+fn print_table_header(verbose: bool) {
+    if verbose {
         println!(
-            "\n{} {} ({}-bit key):",
-            "🔧".cyan().bold(),
-            operation,
-            key_size
+            "  {:<8} {:<12} {:<12} {:<12} {:<12}",
+            "Size".bold(),
+            "Mean".bold(),
+            "Min".bold(),
+            "Max".bold(),
+            "Throughput".bold()
         );
+    } else {
+        println!(
+            "  {:<8} {:<12} {:<12}",
+            "Size".bold(),
+            "Duration".bold(),
+            "Throughput".bold()
+        );
+    }
+}
 
-        if verbose {
-            println!(
-                "  {:<8} {:<12} {:<12} {:<12} {:<12}",
-                "Size".bold(),
-                "Mean".bold(),
-                "Min".bold(),
-                "Max".bold(),
-                "Throughput".bold()
-            );
-        } else {
-            println!(
-                "  {:<8} {:<12} {:<12}",
-                "Size".bold(),
-                "Duration".bold(),
-                "Throughput".bold()
-            );
-        }
+fn print_result_row(result: &BenchmarkResult, verbose: bool) {
+    if verbose {
+        println!(
+            "  {:<8} {:<12} {:<12} {:<12} {:<12}",
+            format!("{} KB", result.data_size_kb).cyan(),
+            format!("{:.1}ms", result.mean_duration.as_millis()).yellow(),
+            format!("{:.1}ms", result.min_duration.as_millis()).green(),
+            format!("{:.1}ms", result.max_duration.as_millis()).red(),
+            format!("{:.1} MB/s", result.throughput_mbps).magenta()
+        );
+    } else {
+        println!(
+            "  {:<8} {:<12} {:<12}",
+            format!("{} KB", result.data_size_kb).cyan(),
+            format!("{:.1}ms", result.mean_duration.as_millis()).yellow(),
+            format!("{:.1} MB/s", result.throughput_mbps).magenta()
+        );
+    }
+}
 
-        let mut sorted_group = group;
-        sorted_group.sort_by_key(|r| r.data_size_kb);
-
-        for result in sorted_group {
-            if verbose {
-                println!(
-                    "  {:<8} {:<12} {:<12} {:<12} {:<12}",
-                    format!("{} KB", result.data_size_kb).cyan(),
-                    format!("{:.1}ms", result.mean_duration.as_millis()).yellow(),
-                    format!("{:.1}ms", result.min_duration.as_millis()).green(),
-                    format!("{:.1}ms", result.max_duration.as_millis()).red(),
-                    format!("{:.1} MB/s", result.throughput_mbps).magenta()
-                );
-            } else {
-                println!(
-                    "  {:<8} {:<12} {:<12}",
-                    format!("{} KB", result.data_size_kb).cyan(),
-                    format!("{:.1}ms", result.mean_duration.as_millis()).yellow(),
-                    format!("{:.1} MB/s", result.throughput_mbps).magenta()
-                );
-            }
-        }
+fn display_summary(results: &[BenchmarkResult]) {
+    if results.is_empty() {
+        return;
     }
 
-    if !results.is_empty() {
-        let avg_throughput =
-            results.iter().map(|r| r.throughput_mbps).sum::<f64>() / results.len() as f64;
-        let fastest = results
-            .iter()
-            .max_by(|a, b| a.throughput_mbps.partial_cmp(&b.throughput_mbps).unwrap());
+    let avg_throughput = calculate_average_throughput(results);
+    let fastest = find_fastest_operation(results);
 
-        println!("\n{} Summary:", "📈".green().bold());
-        println!(
-            "  {} Total operations: {}",
-            "🔢".blue(),
-            results.len().to_string().cyan()
-        );
-        println!(
-            "  {} Average throughput: {:.1} MB/s",
-            "📊".purple(),
-            avg_throughput.to_string().cyan()
-        );
+    println!("\n{} Summary:", "📈".green().bold());
+    println!(
+        "  {} Total operations: {}",
+        "🔢".blue(),
+        results.len().to_string().cyan()
+    );
+    println!(
+        "  {} Average throughput: {:.1} MB/s",
+        "📊".purple(),
+        avg_throughput.to_string().cyan()
+    );
 
-        if let Some(fastest) = fastest {
-            println!(
-                "  {} Fastest operation: {} {} KB ({:.1} MB/s)",
-                "🚀".green(),
-                fastest.operation.green(),
-                fastest.data_size_kb.to_string().cyan(),
-                fastest.throughput_mbps.to_string().cyan()
-            );
-        }
+    if let Some(fastest) = fastest {
+        print_fastest_operation(fastest);
     }
+}
+
+fn calculate_average_throughput(results: &[BenchmarkResult]) -> f64 {
+    results.iter().map(|r| r.throughput_mbps).sum::<f64>() / results.len() as f64
+}
+
+fn find_fastest_operation(results: &[BenchmarkResult]) -> Option<&BenchmarkResult> {
+    results
+        .iter()
+        .max_by(|a, b| a.throughput_mbps.partial_cmp(&b.throughput_mbps).unwrap())
+}
+
+fn print_fastest_operation(fastest: &BenchmarkResult) {
+    println!(
+        "  {} Fastest operation: {} {} KB ({:.1} MB/s)",
+        "🚀".green(),
+        fastest.operation.green(),
+        fastest.data_size_kb.to_string().cyan(),
+        fastest.throughput_mbps.to_string().cyan()
+    );
 }
 
 #[cfg(test)]

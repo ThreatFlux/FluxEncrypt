@@ -594,7 +594,7 @@ dependencies = [
 
 [[package]]
 name = "fluxencrypt"
-version = "0.3.5"
+version = "0.3.7"
 dependencies = [
  "anyhow",
  "base64",
@@ -620,7 +620,7 @@ dependencies = [
 
 [[package]]
 name = "fluxencrypt-async"
-version = "0.3.5"
+version = "0.3.7"
 dependencies = [
  "anyhow",
  "fluxencrypt",
@@ -635,7 +635,7 @@ dependencies = [
 
 [[package]]
 name = "fluxencrypt-cli"
-version = "0.3.5"
+version = "0.3.7"
 dependencies = [
  "anyhow",
  "assert_cmd",

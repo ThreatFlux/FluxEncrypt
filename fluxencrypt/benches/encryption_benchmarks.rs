@@ -34,8 +34,8 @@ fn bench_encryption(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("encryption");
 
-    // Test different data sizes
-    for size in [1024, 8192, 65536, 1048576].iter() {
+    // Test different data sizes (respecting 512KB blob limit)
+    for size in [1024, 8192, 65536, 524288].iter() {
         let data = vec![0u8; *size];
         group.throughput(Throughput::Bytes(*size as u64));
 
@@ -54,8 +54,8 @@ fn bench_decryption(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("decryption");
 
-    // Pre-encrypt data of different sizes
-    let sizes = [1024, 8192, 65536, 1048576];
+    // Pre-encrypt data of different sizes (respecting 512KB blob limit)
+    let sizes = [1024, 8192, 65536, 524288];
     let encrypted_data: Vec<_> = sizes
         .iter()
         .map(|&size| {
@@ -153,67 +153,92 @@ fn bench_aes_gcm_operations(c: &mut Criterion) {
     let key_aes128 = AesKey::generate(CipherSuite::Aes128Gcm).unwrap();
     let key_aes256 = AesKey::generate(CipherSuite::Aes256Gcm).unwrap();
 
-    // Benchmark different data sizes for AES operations
-    for &size in &[1024, 8192, 65536, 1048576] {
+    for &size in &[1024, 8192, 65536, 524288] {
         let data = vec![0u8; size];
         group.throughput(Throughput::Bytes(size as u64));
 
-        // AES-128 encryption
-        group.bench_with_input(
-            BenchmarkId::new("aes128_encrypt", size),
+        bench_aes_encryption(
+            &mut group,
+            size,
             &data,
-            |b, data| {
-                b.iter(|| cipher_aes128.encrypt(black_box(&key_aes128), black_box(data), None))
-            },
+            &cipher_aes128,
+            &key_aes128,
+            &cipher_aes256,
+            &key_aes256,
         );
-
-        // AES-256 encryption
-        group.bench_with_input(
-            BenchmarkId::new("aes256_encrypt", size),
+        bench_aes_decryption(
+            &mut group,
+            size,
             &data,
-            |b, data| {
-                b.iter(|| cipher_aes256.encrypt(black_box(&key_aes256), black_box(data), None))
-            },
-        );
-
-        // Pre-encrypt for decryption benchmarks
-        let (nonce_128, ciphertext_128) = cipher_aes128.encrypt(&key_aes128, &data, None).unwrap();
-        let (nonce_256, ciphertext_256) = cipher_aes256.encrypt(&key_aes256, &data, None).unwrap();
-
-        // AES-128 decryption
-        group.bench_with_input(
-            BenchmarkId::new("aes128_decrypt", size),
-            &(nonce_128, ciphertext_128),
-            |b, (nonce, ciphertext)| {
-                b.iter(|| {
-                    cipher_aes128.decrypt(
-                        black_box(&key_aes128),
-                        black_box(nonce),
-                        black_box(ciphertext),
-                        None,
-                    )
-                })
-            },
-        );
-
-        // AES-256 decryption
-        group.bench_with_input(
-            BenchmarkId::new("aes256_decrypt", size),
-            &(nonce_256, ciphertext_256),
-            |b, (nonce, ciphertext)| {
-                b.iter(|| {
-                    cipher_aes256.decrypt(
-                        black_box(&key_aes256),
-                        black_box(nonce),
-                        black_box(ciphertext),
-                        None,
-                    )
-                })
-            },
+            &cipher_aes128,
+            &key_aes128,
+            &cipher_aes256,
+            &key_aes256,
         );
     }
 
     group.finish();
+}
+
+fn bench_aes_encryption(
+    group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
+    size: usize,
+    data: &[u8],
+    cipher_aes128: &AesGcmCipher,
+    key_aes128: &AesKey,
+    cipher_aes256: &AesGcmCipher,
+    key_aes256: &AesKey,
+) {
+    group.bench_with_input(BenchmarkId::new("aes128_encrypt", size), data, |b, data| {
+        b.iter(|| cipher_aes128.encrypt(black_box(key_aes128), black_box(data), None))
+    });
+
+    group.bench_with_input(BenchmarkId::new("aes256_encrypt", size), data, |b, data| {
+        b.iter(|| cipher_aes256.encrypt(black_box(key_aes256), black_box(data), None))
+    });
+}
+
+fn bench_aes_decryption(
+    group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
+    size: usize,
+    data: &[u8],
+    cipher_aes128: &AesGcmCipher,
+    key_aes128: &AesKey,
+    cipher_aes256: &AesGcmCipher,
+    key_aes256: &AesKey,
+) {
+    let (nonce_128, ciphertext_128) = cipher_aes128.encrypt(key_aes128, data, None).unwrap();
+    let (nonce_256, ciphertext_256) = cipher_aes256.encrypt(key_aes256, data, None).unwrap();
+
+    group.bench_with_input(
+        BenchmarkId::new("aes128_decrypt", size),
+        &(nonce_128, ciphertext_128),
+        |b, (nonce, ciphertext)| {
+            b.iter(|| {
+                cipher_aes128.decrypt(
+                    black_box(key_aes128),
+                    black_box(nonce),
+                    black_box(ciphertext),
+                    None,
+                )
+            })
+        },
+    );
+
+    group.bench_with_input(
+        BenchmarkId::new("aes256_decrypt", size),
+        &(nonce_256, ciphertext_256),
+        |b, (nonce, ciphertext)| {
+            b.iter(|| {
+                cipher_aes256.decrypt(
+                    black_box(key_aes256),
+                    black_box(nonce),
+                    black_box(ciphertext),
+                    None,
+                )
+            })
+        },
+    );
 }
 
 fn bench_aes_key_generation(c: &mut Criterion) {
@@ -236,69 +261,104 @@ fn bench_file_operations(c: &mut Criterion) {
     let keypair = KeyPair::generate(2048).unwrap();
     let config = Config::default();
     let file_cipher = FileStreamCipher::new(config);
-
-    // Create test files of different sizes
     let temp_dir = tempdir().unwrap();
-    let test_sizes = vec![1024, 8192, 65536, 1048576]; // 1KB to 1MB
+    let test_sizes = vec![1024, 8192, 65536, 524288]; // 1KB to 512KB
 
     for &size in &test_sizes {
-        let test_data = vec![0x42u8; size];
-        let input_file = temp_dir.path().join(format!("test_input_{}.bin", size));
-        let encrypted_file = temp_dir.path().join(format!("test_encrypted_{}.enc", size));
-        let decrypted_file = temp_dir.path().join(format!("test_decrypted_{}.bin", size));
-
-        fs::write(&input_file, &test_data).unwrap();
-
+        let test_files = prepare_test_files(&temp_dir, size);
         group.throughput(Throughput::Bytes(size as u64));
 
-        // File encryption benchmark
-        group.bench_with_input(
-            BenchmarkId::new("file_encrypt", size),
-            &(&input_file, &encrypted_file),
-            |b, (input, output)| {
-                b.iter(|| {
-                    if output.exists() {
-                        fs::remove_file(output).unwrap();
-                    }
-                    file_cipher.encrypt_file(
-                        black_box(input),
-                        black_box(output),
-                        black_box(keypair.public_key()),
-                        None,
-                    )
-                })
-            },
-        );
-
-        // Pre-encrypt for decryption benchmark
-        if encrypted_file.exists() {
-            fs::remove_file(&encrypted_file).unwrap();
-        }
-        file_cipher
-            .encrypt_file(&input_file, &encrypted_file, keypair.public_key(), None)
-            .unwrap();
-
-        // File decryption benchmark
-        group.bench_with_input(
-            BenchmarkId::new("file_decrypt", size),
-            &(&encrypted_file, &decrypted_file),
-            |b, (input, output)| {
-                b.iter(|| {
-                    if output.exists() {
-                        fs::remove_file(output).unwrap();
-                    }
-                    file_cipher.decrypt_file(
-                        black_box(input),
-                        black_box(output),
-                        black_box(keypair.private_key()),
-                        None,
-                    )
-                })
-            },
-        );
+        bench_file_encryption(&mut group, size, &test_files, &file_cipher, &keypair);
+        bench_file_decryption(&mut group, size, &test_files, &file_cipher, &keypair);
     }
 
     group.finish();
+}
+
+struct TestFiles {
+    input: std::path::PathBuf,
+    encrypted: std::path::PathBuf,
+    decrypted: std::path::PathBuf,
+}
+
+fn prepare_test_files(temp_dir: &tempfile::TempDir, size: usize) -> TestFiles {
+    let test_data = vec![0x42u8; size];
+    let input_file = temp_dir.path().join(format!("test_input_{}.bin", size));
+    let encrypted_file = temp_dir.path().join(format!("test_encrypted_{}.enc", size));
+    let decrypted_file = temp_dir.path().join(format!("test_decrypted_{}.bin", size));
+
+    fs::write(&input_file, &test_data).unwrap();
+
+    TestFiles {
+        input: input_file,
+        encrypted: encrypted_file,
+        decrypted: decrypted_file,
+    }
+}
+
+fn bench_file_encryption(
+    group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
+    size: usize,
+    test_files: &TestFiles,
+    file_cipher: &FileStreamCipher,
+    keypair: &KeyPair,
+) {
+    group.bench_with_input(
+        BenchmarkId::new("file_encrypt", size),
+        &(&test_files.input, &test_files.encrypted),
+        |b, (input, output)| {
+            b.iter(|| {
+                if output.exists() {
+                    fs::remove_file(output).unwrap();
+                }
+                file_cipher.encrypt_file(
+                    black_box(input),
+                    black_box(output),
+                    black_box(keypair.public_key()),
+                    None,
+                )
+            })
+        },
+    );
+}
+
+fn bench_file_decryption(
+    group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
+    size: usize,
+    test_files: &TestFiles,
+    file_cipher: &FileStreamCipher,
+    keypair: &KeyPair,
+) {
+    // Pre-encrypt for decryption benchmark
+    if test_files.encrypted.exists() {
+        fs::remove_file(&test_files.encrypted).unwrap();
+    }
+    file_cipher
+        .encrypt_file(
+            &test_files.input,
+            &test_files.encrypted,
+            keypair.public_key(),
+            None,
+        )
+        .unwrap();
+
+    group.bench_with_input(
+        BenchmarkId::new("file_decrypt", size),
+        &(&test_files.encrypted, &test_files.decrypted),
+        |b, (input, output)| {
+            b.iter(|| {
+                if output.exists() {
+                    fs::remove_file(output).unwrap();
+                }
+                file_cipher.decrypt_file(
+                    black_box(input),
+                    black_box(output),
+                    black_box(keypair.private_key()),
+                    None,
+                )
+            })
+        },
+    );
 }
 
 fn bench_cryptum_api(c: &mut Criterion) {
@@ -308,7 +368,7 @@ fn bench_cryptum_api(c: &mut Criterion) {
     let keypair = cryptum.generate_keypair(2048).unwrap();
 
     // Benchmark different data sizes with Cryptum API
-    for &size in &[1024, 8192, 65536, 1048576] {
+    for &size in &[1024, 8192, 65536, 524288] {
         let data = vec![0x42u8; size];
         group.throughput(Throughput::Bytes(size as u64));
 
