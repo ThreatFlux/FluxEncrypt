@@ -145,16 +145,16 @@ cargo install fluxencrypt-cli
 fluxencrypt-cli keygen --output-dir ./keys
 
 # Encrypt a file
-fluxencrypt-cli encrypt --key ./keys/public.pem --input document.pdf --output document.pdf.enc
+fluxencrypt-cli encrypt --key ./keys/fluxencrypt_key.pub --input document.pdf --output document.pdf.enc
 
 # Decrypt a file  
-fluxencrypt-cli decrypt --key ./keys/private.pem --input document.pdf.enc --output document.pdf
+fluxencrypt-cli decrypt --key ./keys/fluxencrypt_key.pem --input document.pdf.enc --output document.pdf
 
 # Batch encrypt multiple files
-fluxencrypt batch-encrypt --key ./keys/public.pem --input-dir ./documents --output-dir ./encrypted
+fluxencrypt-cli batch-encrypt --key ./keys/fluxencrypt_key.pub --input-dir ./documents --output-dir ./encrypted
 
 # Stream encrypt large files
-fluxencrypt stream-encrypt --key ./keys/public.pem --input large-file.bin --output large-file.bin.enc
+fluxencrypt-cli stream-encrypt --key ./keys/fluxencrypt_key.pub --input large-file.bin --output large-file.bin.enc
 ```
 
 ## Configuration
