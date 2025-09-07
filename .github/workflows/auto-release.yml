@@ -74,10 +74,9 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install cargo-workspaces and cargo-bump
+      - name: Install cargo-workspaces
         run: |
           cargo install cargo-workspaces
-          cargo install cargo-bump
 
       - name: Configure git
         run: |
@@ -160,25 +159,40 @@ jobs:
         id: version
         run: |
           BUMP_TYPE="${{ steps.version_type.outputs.bump_type }}"
+          CURRENT_VERSION="${{ steps.current_version.outputs.current }}"
           
-          # Simplified version bumping using cargo bump
-          # First bump workspace root
-          cd $GITHUB_WORKSPACE
-          cargo bump $BUMP_TYPE
+          # Calculate new version manually since cargo bump doesn't support workspaces
+          IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
           
-          # Get the new version
-          NEW_VERSION=$(grep "^version" Cargo.toml | head -1 | cut -d'"' -f2)
-          echo "New version: $NEW_VERSION"
+          case "$BUMP_TYPE" in
+            major)
+              NEW_VERSION="$((major + 1)).0.0"
+              ;;
+            minor)
+              NEW_VERSION="${major}.$((minor + 1)).0"
+              ;;
+            patch)
+              NEW_VERSION="${major}.${minor}.$((patch + 1))"
+              ;;
+            *)
+              echo "Unknown bump type: $BUMP_TYPE"
+              exit 1
+              ;;
+          esac
+          
+          echo "Bumping from $CURRENT_VERSION to $NEW_VERSION (type: $BUMP_TYPE)"
+          
+          # Update version in workspace root
+          sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" Cargo.toml
           
           # Update all workspace members to the same version
           for dir in fluxencrypt fluxencrypt-cli fluxencrypt-async; do
             if [ -d "$dir" ]; then
-              cd "$dir"
-              sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" Cargo.toml
+              echo "Updating $dir to version $NEW_VERSION"
+              sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" "$dir/Cargo.toml"
               # Update internal dependencies
-              sed -i "s/fluxencrypt = { version = \".*\"/fluxencrypt = { version = \"$NEW_VERSION\"/" Cargo.toml
-              sed -i "s/fluxencrypt-async = { version = \".*\"/fluxencrypt-async = { version = \"$NEW_VERSION\"/" Cargo.toml
-              cd ..
+              sed -i "s/fluxencrypt = { version = \"[^\"]*\"/fluxencrypt = { version = \"$NEW_VERSION\"/" "$dir/Cargo.toml"
+              sed -i "s/fluxencrypt-async = { version = \"[^\"]*\"/fluxencrypt-async = { version = \"$NEW_VERSION\"/" "$dir/Cargo.toml"
             fi
           done
           
