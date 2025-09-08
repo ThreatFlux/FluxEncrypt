@@ -37,13 +37,35 @@ pub struct EnvSecret {
     original: String,
 }
 
-impl std::fmt::Debug for EnvSecret {
+struct EnvSecretDebugView {
+    format: SecretFormat,
+    data_len: usize,
+    original_len: usize,
+}
+
+impl std::fmt::Debug for EnvSecretDebugView {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("EnvSecret")
             .field("format", &self.format)
-            .field("data_len", &self.data.len())
-            .field("original_len", &self.original.len())
+            .field("data_len", &self.data_len)
+            .field("original_len", &self.original_len)
             .finish()
+    }
+}
+
+impl EnvSecret {
+    fn debug_view(&self) -> EnvSecretDebugView {
+        EnvSecretDebugView {
+            format: self.format,
+            data_len: self.data.len(),
+            original_len: self.original.len(),
+        }
+    }
+}
+
+impl std::fmt::Debug for EnvSecret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.debug_view().fmt(f)
     }
 }
 
@@ -330,5 +352,16 @@ mod tests {
         assert_eq!(secret.to_hex(), "48656c6c6f20576f726c64");
         assert!(!secret.is_empty());
         assert_eq!(secret.len(), 11);
+    }
+
+    #[test]
+    fn test_debug_does_not_expose_secret() {
+        let secret =
+            EnvSecret::from_string_with_format("super-secret".to_string(), SecretFormat::Raw)
+                .unwrap();
+
+        let debug = format!("{:?}", secret);
+        assert!(debug.contains("data_len"));
+        assert!(!debug.contains("super-secret"));
     }
 }
