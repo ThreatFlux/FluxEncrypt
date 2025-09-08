@@ -51,24 +51,39 @@ pub fn execute(cmd: EncryptCommand) -> CommandResult {
 
     let public_key = load_public_key(cmd.key.as_deref())?;
     let cryptum = create_cryptum_instance()?;
+    let stdin = io::stdin();
 
-    match determine_input_source(&cmd) {
+    handle_input(
+        determine_input_source(&cmd),
+        &cryptum,
+        cmd.output,
+        &public_key,
+        cmd.raw,
+        stdin,
+    )
+}
+
+fn handle_input<R: Read>(
+    source: InputSource,
+    cryptum: &Cryptum,
+    output: Option<String>,
+    public_key: &fluxencrypt::keys::PublicKey,
+    raw: bool,
+    stdin: R,
+) -> CommandResult {
+    match source {
         InputSource::File(input_file) => {
-            let output_file = require_output_file(cmd.output)?;
-            handle_file_encryption(&cryptum, &input_file, &output_file, &public_key, cmd.raw)?;
+            let output_file = require_output_file(output)?;
+            handle_file_encryption(cryptum, &input_file, &output_file, public_key, raw)
         }
         InputSource::DirectData(data) => {
-            handle_data_encryption(&cryptum, &data, cmd.output, &public_key, cmd.raw)?;
+            handle_data_encryption(cryptum, &data, output, public_key, raw)
         }
         InputSource::EnvFile(env_file) => {
-            handle_env_file_encryption(&cryptum, &env_file, cmd.output, &public_key, cmd.raw)?;
+            handle_env_file_encryption(cryptum, &env_file, output, public_key, raw)
         }
-        InputSource::Stdin => {
-            handle_stdin_encryption(&cryptum, cmd.output, &public_key, cmd.raw)?;
-        }
+        InputSource::Stdin => handle_stdin_encryption(cryptum, output, public_key, raw, stdin),
     }
-
-    Ok(())
 }
 
 fn encrypt_file(
@@ -211,13 +226,14 @@ fn handle_env_file_encryption(
 }
 
 /// Handle stdin encryption
-fn handle_stdin_encryption(
+fn handle_stdin_encryption<R: Read>(
     cryptum: &Cryptum,
     output: Option<String>,
     public_key: &fluxencrypt::keys::PublicKey,
     raw: bool,
+    mut reader: R,
 ) -> CommandResult {
-    let stdin_data = read_stdin_data()?;
+    let stdin_data = read_stdin_data(&mut reader)?;
     let encrypted_data = encrypt_data(cryptum, &stdin_data, public_key)?;
 
     if let Some(output_file) = output {
@@ -231,9 +247,9 @@ fn handle_stdin_encryption(
 }
 
 /// Read data from stdin
-fn read_stdin_data() -> Result<Vec<u8>, anyhow::Error> {
+fn read_stdin_data<R: Read>(reader: &mut R) -> Result<Vec<u8>, anyhow::Error> {
     let mut stdin_data = Vec::new();
-    io::stdin()
+    reader
         .read_to_end(&mut stdin_data)
         .map_err(|e| anyhow::anyhow!("Failed to read from stdin: {}", e))?;
 
@@ -447,4 +463,94 @@ fn write_output_file(ciphertext: &[u8], output_path: &str, raw_output: bool) -> 
         .map_err(|e| anyhow::anyhow!("Failed to write output file: {}", e))?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+    use tempfile::NamedTempFile;
+
+    use fluxencrypt::keys::KeyPair;
+
+    fn setup() -> (Cryptum, fluxencrypt::keys::PublicKey) {
+        let cryptum = cryptum().expect("cryptum instance");
+        let keypair = KeyPair::generate(2048).expect("keypair");
+        (cryptum, keypair.public_key().clone())
+    }
+
+    #[test]
+    fn handle_input_file_branch() {
+        let (crypt, pk) = setup();
+        let input = NamedTempFile::new().unwrap();
+        std::fs::write(input.path(), b"data").unwrap();
+        let output = NamedTempFile::new().unwrap();
+
+        handle_input(
+            InputSource::File(input.path().to_string_lossy().into()),
+            &crypt,
+            Some(output.path().to_string_lossy().into()),
+            &pk,
+            false,
+            Cursor::new(vec![]),
+        )
+        .unwrap();
+
+        assert!(output.path().metadata().unwrap().len() > 0);
+    }
+
+    #[test]
+    fn handle_input_direct_data_branch() {
+        let (crypt, pk) = setup();
+        let output = NamedTempFile::new().unwrap();
+        handle_input(
+            InputSource::DirectData("hello".into()),
+            &crypt,
+            Some(output.path().to_string_lossy().into()),
+            &pk,
+            false,
+            Cursor::new(vec![]),
+        )
+        .unwrap();
+
+        assert!(output.path().metadata().unwrap().len() > 0);
+    }
+
+    #[test]
+    fn handle_input_env_file_branch() {
+        let (crypt, pk) = setup();
+        let env_file = NamedTempFile::new().unwrap();
+        std::fs::write(env_file.path(), "KEY=value").unwrap();
+        let output = NamedTempFile::new().unwrap();
+
+        handle_input(
+            InputSource::EnvFile(env_file.path().to_string_lossy().into()),
+            &crypt,
+            Some(output.path().to_string_lossy().into()),
+            &pk,
+            false,
+            Cursor::new(vec![]),
+        )
+        .unwrap();
+
+        assert!(output.path().metadata().unwrap().len() > 0);
+    }
+
+    #[test]
+    fn handle_input_stdin_branch() {
+        let (crypt, pk) = setup();
+        let output = NamedTempFile::new().unwrap();
+
+        handle_input(
+            InputSource::Stdin,
+            &crypt,
+            Some(output.path().to_string_lossy().into()),
+            &pk,
+            false,
+            Cursor::new(b"stdin data".to_vec()),
+        )
+        .unwrap();
+
+        assert!(output.path().metadata().unwrap().len() > 0);
+    }
 }
