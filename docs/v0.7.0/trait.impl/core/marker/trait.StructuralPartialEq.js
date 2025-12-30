@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["fluxencrypt",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/marker/trait.StructuralPartialEq.html\" title=\"trait core::marker::StructuralPartialEq\">StructuralPartialEq</a> for <a class=\"enum\" href=\"fluxencrypt/config/enum.CipherSuite.html\" title=\"enum fluxencrypt::config::CipherSuite\">CipherSuite</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/marker/trait.StructuralPartialEq.html\" title=\"trait core::marker::StructuralPartialEq\">StructuralPartialEq</a> for <a class=\"enum\" href=\"fluxencrypt/config/enum.Compression.html\" title=\"enum fluxencrypt::config::Compression\">Compression</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/marker/trait.StructuralPartialEq.html\" title=\"trait core::marker::StructuralPartialEq\">StructuralPartialEq</a> for <a class=\"enum\" href=\"fluxencrypt/config/enum.RsaKeySize.html\" title=\"enum fluxencrypt::config::RsaKeySize\">RsaKeySize</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/marker/trait.StructuralPartialEq.html\" title=\"trait core::marker::StructuralPartialEq\">StructuralPartialEq</a> for <a class=\"enum\" href=\"fluxencrypt/env/secrets/enum.SecretFormat.html\" title=\"enum fluxencrypt::env::secrets::SecretFormat\">SecretFormat</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/marker/trait.StructuralPartialEq.html\" title=\"trait core::marker::StructuralPartialEq\">StructuralPartialEq</a> for <a class=\"enum\" href=\"fluxencrypt/keys/parsing/enum.KeyFormat.html\" title=\"enum fluxencrypt::keys::parsing::KeyFormat\">KeyFormat</a>"]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[1650]}
