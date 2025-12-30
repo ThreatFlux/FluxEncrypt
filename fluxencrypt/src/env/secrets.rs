@@ -26,6 +26,7 @@ pub enum SecretFormat {
 
 /// A secret loaded from an environment variable
 #[derive(ZeroizeOnDrop)]
+#[allow(unused_assignments)] // False positive: fields are used via getter methods
 pub struct EnvSecret {
     /// The raw secret data
     data: Vec<u8>,

@@ -24,8 +24,10 @@ A high-performance, secure encryption SDK for Rust applications, providing both 
 - **Hybrid Encryption**: Combines RSA-OAEP and AES-GCM for optimal security and performance
 - **AES-256-GCM**: Fast symmetric encryption with authenticated encryption
 - **RSA-OAEP**: Secure asymmetric encryption with optimal padding (4096-bit keys by default)
+- **Symmetric Cipher**: Simple AES-256-GCM for secret storage (API tokens, MFA secrets, etc.)
 - **Key Derivation**: PBKDF2 and Argon2 support for secure key generation
 - **Base64 Encoding**: Default base64 output for easy handling in text environments
+- **Unified API**: `Cryptum` provides a single interface for all encryption operations
 
 ### 🚀 Performance
 - **Stream Processing**: Handle large files and data streams efficiently
@@ -60,13 +62,13 @@ Add FluxEncrypt to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-fluxencrypt = "0.1.3"
+fluxencrypt = "0.5.0"
 
 # For async support
-fluxencrypt-async = "0.1.3"
+fluxencrypt-async = "0.5.0"
 
 # For CLI usage
-fluxencrypt-cli = "0.1.3"
+fluxencrypt-cli = "0.5.0"
 ```
 
 ### Basic Usage
@@ -138,6 +140,56 @@ let private_key = provider.get_private_key("FLUX_PRIVATE_KEY")?;
 let public_key = provider.get_public_key("FLUX_PUBLIC_KEY")?;
 ```
 
+### Symmetric Encryption for Secrets
+
+For simple secret storage (API tokens, MFA secrets, database credentials):
+
+```rust
+use fluxencrypt::SymmetricCipher;
+
+// Create cipher from a 32-byte hex-encoded key
+let key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+let cipher = SymmetricCipher::new(key)?;
+
+// Encrypt a secret - output is base64 encoded
+let encrypted = cipher.encrypt("my-api-token-secret")?;
+
+// Decrypt it back
+let decrypted = cipher.decrypt(&encrypted)?;
+
+// Generate a new random key
+let new_key = SymmetricCipher::generate_key();
+```
+
+### Unified Cryptum Interface
+
+For applications needing all encryption features in one interface:
+
+```rust
+use fluxencrypt::{Cryptum, cryptum};
+
+// Create with defaults
+let crypto = cryptum()?;
+
+// Or use the builder for custom configuration
+let crypto = Cryptum::builder()
+    .cipher_suite(CipherSuite::Aes256Gcm)
+    .memory_limit_mb(256)
+    .hardware_acceleration(true)
+    .build()?;
+
+// Generate keys
+let keypair = crypto.generate_keypair(4096)?;
+
+// Encrypt/decrypt data
+let ciphertext = crypto.encrypt(keypair.public_key(), b"secret data")?;
+let plaintext = crypto.decrypt(keypair.private_key(), &ciphertext)?;
+
+// File operations with progress
+crypto.encrypt_file("input.pdf", "output.enc", keypair.public_key())?;
+crypto.decrypt_file("output.enc", "restored.pdf", keypair.private_key())?;
+```
+
 ## Command Line Interface
 
 FluxEncrypt includes a powerful CLI for file encryption operations:
@@ -182,18 +234,31 @@ fluxencrypt-cli stream-encrypt --key ./keys/fluxencrypt_key.pub --input large-fi
 FluxEncrypt provides flexible configuration options:
 
 ```rust
-use fluxencrypt::{Config, CipherSuite, KeyDerivation};
+use fluxencrypt::config::{Config, CipherSuite, KeyDerivation, RsaKeySize};
 
 let config = Config::builder()
     .cipher_suite(CipherSuite::Aes256Gcm)
+    .rsa_key_size(RsaKeySize::Rsa4096)
     .key_derivation(KeyDerivation::Pbkdf2 {
         iterations: 100_000,
         salt_len: 32,
     })
-    .compression(true)
     .memory_limit_mb(256)
-    .build();
+    .hardware_acceleration(true)
+    .secure_memory(true)
+    .build()?;
 ```
+
+### Configuration Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `cipher_suite` | `Aes256Gcm` | Symmetric encryption algorithm |
+| `rsa_key_size` | `Rsa4096` | RSA key size for hybrid encryption |
+| `memory_limit_mb` | `256` | Memory limit for operations |
+| `hardware_acceleration` | `true` | Enable hardware crypto instructions |
+| `stream_chunk_size` | `64KB` | Chunk size for streaming operations |
+| `secure_memory` | `true` | Enable automatic secret zeroization |
 
 ## Performance Benchmarks
 
@@ -244,12 +309,19 @@ fluxencrypt/
 
 The `fluxencrypt/examples/` directory contains comprehensive examples:
 
-- `basic_encryption.rs` - Simple encrypt/decrypt operations with 4096-bit keys
-- `file_encryption.rs` - File-based encryption with streaming
+- `basic_encryption.rs` - Simple encrypt/decrypt operations with hybrid encryption
+- `file_encryption.rs` - File-based encryption with streaming and progress tracking
 - `key_management.rs` - Key generation, storage, and base64 handling
-- `environment_config.rs` - Environment-based configuration
+- `environment_config.rs` - Environment-based configuration and secret loading
 
-**Note**: Examples use 2048-bit keys for demonstration purposes. Production use should prefer 4096-bit keys (CLI default).
+Run an example:
+
+```bash
+cargo run --example basic_encryption
+cargo run --example file_encryption
+```
+
+**Security Note**: Examples may use smaller key sizes for faster execution. Production deployments should always use 4096-bit RSA keys (the library default).
 
 ## Contributing
 

@@ -7,7 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2025-12-30
+
 ### Added
+- **SymmetricCipher**: New simple AES-256-GCM encryption for secret storage (API tokens, MFA secrets, database credentials)
+- **Cryptum**: Unified API providing single interface for all encryption operations
+- **CryptumBuilder**: Fluent builder pattern for configuring Cryptum instances
 - Python-compatible CLI features for easier integration
 - String data encryption/decryption via `--data` flag
 - Base64 encoded output by default for text-friendly handling
@@ -18,14 +23,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Split large modules into focused, maintainable files
 - Enhanced CLI user experience with better output formatting
 - Improved error handling and validation
+- `generate_key()` method for SymmetricCipher to create random encryption keys
 
 ### Changed
 - **BREAKING**: Default RSA key size increased from 2048 to 4096 bits
 - **BREAKING**: CLI output format changed to base64 by default
+- **BREAKING**: Minimum supported Rust version (MSRV) is now 1.89.0
 - Refactored codebase structure for better maintainability
 - Enhanced security with pinned GitHub Actions versions
 - Improved temporary file handling with secure permissions
 - Updated documentation to reflect current functionality
+- Version bump to 0.5.0 (major feature release)
 
 ### Security
 - Upgraded to 4096-bit RSA keys by default for enhanced security
@@ -40,6 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test failures addressed
 - CLI help text now matches actual functionality
 - Corrected examples to use current API
+- Fixed clippy warnings for Rust 1.92.0 compatibility
+- Integration tests now run without `#[ignore]` attributes
 
 ### Performance
 - Optimized key generation for 4096-bit keys
