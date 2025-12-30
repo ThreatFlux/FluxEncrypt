@@ -56,11 +56,13 @@ pub mod env;
 pub mod error;
 pub mod keys;
 pub mod stream;
+pub mod symmetric;
 
 // Re-export commonly used types
 pub use config::Config;
 pub use encryption::HybridCipher;
 pub use error::{FluxError, Result};
+pub use symmetric::SymmetricCipher;
 
 use encryption::hybrid::HybridCipher as InternalHybridCipher;
 use keys::{KeyPair, PrivateKey, PublicKey};

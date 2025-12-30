@@ -41,6 +41,9 @@ log = { workspace = true }
 # Utilities
 rand = { workspace = true }
 
+# Encoding for symmetric cipher
+hex = { workspace = true }
+
 [dev-dependencies]
 criterion = { workspace = true }
 proptest = { workspace = true }

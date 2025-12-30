@@ -3,18 +3,13 @@
 use crate::error::{FluxError, Result};
 
 /// Supported cipher suites for symmetric encryption
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CipherSuite {
     /// AES-128-GCM
     Aes128Gcm,
     /// AES-256-GCM (recommended)
+    #[default]
     Aes256Gcm,
-}
-
-impl Default for CipherSuite {
-    fn default() -> Self {
-        Self::Aes256Gcm
-    }
 }
 
 /// Key derivation algorithms and parameters
@@ -49,20 +44,15 @@ impl Default for KeyDerivation {
 }
 
 /// RSA key size options
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum RsaKeySize {
     /// 2048-bit keys (minimum recommended)
     Rsa2048,
     /// 3072-bit keys
     Rsa3072,
     /// 4096-bit keys (maximum security)
+    #[default]
     Rsa4096,
-}
-
-impl Default for RsaKeySize {
-    fn default() -> Self {
-        Self::Rsa4096
-    }
 }
 
 impl From<RsaKeySize> for usize {
@@ -76,9 +66,10 @@ impl From<RsaKeySize> for usize {
 }
 
 /// Compression algorithms
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Compression {
     /// No compression
+    #[default]
     None,
     /// Zlib compression (future implementation)
     #[allow(dead_code)]
@@ -86,12 +77,6 @@ pub enum Compression {
     /// LZ4 compression (future implementation)
     #[allow(dead_code)]
     Lz4,
-}
-
-impl Default for Compression {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 /// Configuration for FluxEncrypt operations

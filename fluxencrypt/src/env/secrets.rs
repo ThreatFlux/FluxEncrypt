@@ -91,7 +91,7 @@ impl EnvSecret {
     /// Decode hexadecimal string data
     fn decode_hex(value: &str) -> Result<Vec<u8>> {
         let clean_value = value.trim();
-        if clean_value.len() % 2 != 0 {
+        if !clean_value.len().is_multiple_of(2) {
             return Err(FluxError::invalid_input("Hex string must have even length"));
         }
 
