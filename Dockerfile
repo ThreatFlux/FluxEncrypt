@@ -2,10 +2,10 @@
 # Stage 1: Build the application
 FROM rust:1.89-slim AS builder
 
-# Install required dependencies with pinned versions and minimal packages
+# Install required dependencies (versions managed by base image)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    pkgconf=1.8.1-4 \
-    libssl-dev=3.5.1-1 \
+    pkgconf \
+    libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -48,10 +48,10 @@ RUN touch fluxencrypt/src/lib.rs fluxencrypt-cli/src/main.rs fluxencrypt-async/s
 # Stage 2: Create minimal runtime image
 FROM debian:trixie-slim
 
-# Install runtime dependencies with pinned versions and minimal packages
+# Install runtime dependencies (versions managed by base image)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates=20250419 \
-    libssl3t64=3.5.1-1 \
+    ca-certificates \
+    libssl3t64 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
