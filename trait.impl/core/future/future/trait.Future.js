@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["fluxencrypt_async",[["impl&lt;F&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/future/future/trait.Future.html\" title=\"trait core::future::future::Future\">Future</a> for <a class=\"struct\" href=\"fluxencrypt_async/futures/struct.DecryptionFuture.html\" title=\"struct fluxencrypt_async::futures::DecryptionFuture\">DecryptionFuture</a>&lt;F&gt;<div class=\"where\">where\n    F: <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/future/future/trait.Future.html\" title=\"trait core::future::future::Future\">Future</a>&lt;Output = Result&lt;<a class=\"struct\" href=\"https://doc.rust-lang.org/1.92.0/alloc/vec/struct.Vec.html\" title=\"struct alloc::vec::Vec\">Vec</a>&lt;<a class=\"primitive\" href=\"https://doc.rust-lang.org/1.92.0/std/primitive.u8.html\">u8</a>&gt;&gt;&gt;,</div>"],["impl&lt;F&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/future/future/trait.Future.html\" title=\"trait core::future::future::Future\">Future</a> for <a class=\"struct\" href=\"fluxencrypt_async/futures/struct.EncryptionFuture.html\" title=\"struct fluxencrypt_async::futures::EncryptionFuture\">EncryptionFuture</a>&lt;F&gt;<div class=\"where\">where\n    F: <a class=\"trait\" href=\"https://doc.rust-lang.org/1.92.0/core/future/future/trait.Future.html\" title=\"trait core::future::future::Future\">Future</a>&lt;Output = Result&lt;<a class=\"struct\" href=\"https://doc.rust-lang.org/1.92.0/alloc/vec/struct.Vec.html\" title=\"struct alloc::vec::Vec\">Vec</a>&lt;<a class=\"primitive\" href=\"https://doc.rust-lang.org/1.92.0/std/primitive.u8.html\">u8</a>&gt;&gt;&gt;,</div>"]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[1637]}
