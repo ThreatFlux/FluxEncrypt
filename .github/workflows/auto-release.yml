@@ -313,7 +313,7 @@ jobs:
 
       - name: Install cross for ARM builds
         if: contains(matrix.target, 'aarch64') && matrix.os == 'ubuntu-latest'
-        run: cargo install cross --git https://github.com/cross-rs/cross
+        run: cargo install cross --version 0.2.5 --locked
 
       - name: Cache dependencies
         uses: actions/cache@v4
@@ -625,7 +625,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
         with:
           image-ref: 'threatflux/fluxencrypt:${{ needs.version_and_release.outputs.version }}'
           format: 'sarif'
