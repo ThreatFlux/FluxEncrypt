@@ -8,7 +8,7 @@ use crate::config::Config;
 use crate::error::{FluxError, Result};
 use crate::keys::{PrivateKey, PublicKey};
 use crate::stream::{cipher::ProgressCallback, FileStreamCipher};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -439,7 +439,15 @@ impl BatchProcessor {
 
         if batch_config.preserve_structure {
             if let Some(parent) = input_path.parent() {
-                output_dir.join(parent).join(output_name)
+                let safe_parent: PathBuf = parent
+                    .components()
+                    .filter_map(|component| match component {
+                        Component::Normal(part) => Some(part),
+                        _ => None,
+                    })
+                    .collect();
+
+                output_dir.join(safe_parent).join(output_name)
             } else {
                 output_dir.join(output_name)
             }
@@ -549,5 +557,31 @@ mod tests {
 
         // Should preserve structure and add .enc extension
         assert!(output_path.to_string_lossy().contains("file.txt.enc"));
+    }
+
+    #[test]
+    fn test_output_path_strips_absolute_parent() {
+        let processor = BatchProcessor::default();
+        let config = BatchConfig::default();
+
+        let input = Path::new("/etc/passwd");
+        let output_dir = Path::new("/safe/output");
+
+        let output_path = processor.build_output_path(input, output_dir, &config);
+
+        assert_eq!(output_path, Path::new("/safe/output/etc/passwd.enc"));
+    }
+
+    #[test]
+    fn test_output_path_strips_traversal_segments() {
+        let processor = BatchProcessor::default();
+        let config = BatchConfig::default();
+
+        let input = Path::new("../secrets/../../passwd");
+        let output_dir = Path::new("/safe/output");
+
+        let output_path = processor.build_output_path(input, output_dir, &config);
+
+        assert_eq!(output_path, Path::new("/safe/output/secrets/passwd.enc"));
     }
 }
