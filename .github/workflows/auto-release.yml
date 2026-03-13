@@ -395,19 +395,49 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
+          SYFT_VERSION="v1.20.0"
+
           # Install syft if not available
           if ! command -v syft >/dev/null 2>&1; then
             echo "Installing syft..."
-            if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-              # macOS installation
-              brew install syft || {
-                curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b "$HOME/.local/bin"
-                export PATH="$HOME/.local/bin:$PATH"
-              }
-            else
-              # Linux installation
-              curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+            case "${{ matrix.os }}" in
+              macos-latest)
+                OS="darwin"
+                ARCH="amd64"
+                INSTALL_DIR="$HOME/.local/bin"
+                mkdir -p "$INSTALL_DIR"
+                ;;
+              *)
+                OS="linux"
+                ARCH="amd64"
+                INSTALL_DIR="/usr/local/bin"
+                ;;
+            esac
+
+            TARBALL="syft_${SYFT_VERSION#v}_${OS}_${ARCH}.tar.gz"
+            curl -sSfL "https://github.com/anchore/syft/releases/download/${SYFT_VERSION}/${TARBALL}" -o "$TARBALL"
+            curl -sSfL "https://github.com/anchore/syft/releases/download/${SYFT_VERSION}/checksums.txt" -o checksums.txt
+
+            EXPECTED_SHA="$(awk -v file="$TARBALL" '$2 == file { print $1 }' checksums.txt)"
+            if [[ -z "$EXPECTED_SHA" ]]; then
+              echo "Failed to find checksum for $TARBALL"
+              exit 1
             fi
+
+            if command -v sha256sum >/dev/null 2>&1; then
+              ACTUAL_SHA="$(sha256sum "$TARBALL" | awk '{print $1}')"
+            else
+              ACTUAL_SHA="$(shasum -a 256 "$TARBALL" | awk '{print $1}')"
+            fi
+
+            if [[ "$EXPECTED_SHA" != "$ACTUAL_SHA" ]]; then
+              echo "Syft checksum verification failed"
+              exit 1
+            fi
+
+            tar -xzf "$TARBALL" syft
+            install -m 0755 syft "$INSTALL_DIR/syft"
+            export PATH="$INSTALL_DIR:$PATH"
           fi
           
           # Generate SBOM using syft directly
@@ -596,9 +626,23 @@ jobs:
         if: steps.docker_sbom.outcome == 'failure'
         continue-on-error: true
         run: |
+          SYFT_VERSION="v1.20.0"
+
           # Try syft directly as fallback
           if ! command -v syft >/dev/null 2>&1; then
-            curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+            TARBALL="syft_${SYFT_VERSION#v}_linux_amd64.tar.gz"
+            curl -sSfL "https://github.com/anchore/syft/releases/download/${SYFT_VERSION}/${TARBALL}" -o "$TARBALL"
+            curl -sSfL "https://github.com/anchore/syft/releases/download/${SYFT_VERSION}/checksums.txt" -o checksums.txt
+
+            EXPECTED_SHA="$(awk -v file="$TARBALL" '$2 == file { print $1 }' checksums.txt)"
+            ACTUAL_SHA="$(sha256sum "$TARBALL" | awk '{print $1}')"
+            if [[ -z "$EXPECTED_SHA" || "$EXPECTED_SHA" != "$ACTUAL_SHA" ]]; then
+              echo "Syft checksum verification failed"
+              exit 1
+            fi
+
+            tar -xzf "$TARBALL" syft
+            install -m 0755 syft /usr/local/bin/syft
           fi
           syft threatflux/fluxencrypt:${{ needs.version_and_release.outputs.version }} \
             -o spdx-json \
