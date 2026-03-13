@@ -179,6 +179,20 @@ impl StreamCipher {
         match input.read_exact(&mut size_buffer) {
             Ok(()) => {
                 let chunk_size = u32::from_be_bytes(size_buffer) as usize;
+
+                let max_chunk_size = self
+                    .config
+                    .memory_limit_mb
+                    .checked_mul(1024 * 1024)
+                    .ok_or_else(|| FluxError::config("Memory limit is too large"))?;
+
+                if chunk_size == 0 || chunk_size > max_chunk_size {
+                    return Err(FluxError::invalid_input(format!(
+                        "Invalid encrypted chunk size: {} bytes (allowed range: 1..={})",
+                        chunk_size, max_chunk_size
+                    )));
+                }
+
                 Ok(Some(chunk_size))
             }
             Err(e) => {
@@ -365,6 +379,43 @@ mod tests {
         assert_eq!(result.unwrap(), 13); // "Hello, world!" is 13 bytes
     }
 
+    #[test]
+    fn test_decrypt_stream_rejects_zero_chunk_size() {
+        use std::io::Cursor;
+
+        let keypair = KeyPair::generate(2048).unwrap();
+        let cipher = StreamCipher::default();
+
+        let input = Cursor::new(0u32.to_be_bytes().to_vec());
+        let output = Cursor::new(Vec::new());
+
+        let result = cipher.decrypt_stream(keypair.private_key(), input, output, None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid encrypted chunk size"));
+    }
+
+    #[test]
+    fn test_decrypt_stream_rejects_chunk_over_memory_limit() {
+        use std::io::Cursor;
+
+        let keypair = KeyPair::generate(2048).unwrap();
+        let config = Config::builder().memory_limit_mb(1).build().unwrap();
+        let cipher = StreamCipher::new(config);
+
+        let oversized_chunk = (2 * 1024 * 1024u32).to_be_bytes().to_vec();
+        let input = Cursor::new(oversized_chunk);
+        let output = Cursor::new(Vec::new());
+
+        let result = cipher.decrypt_stream(keypair.private_key(), input, output, None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid encrypted chunk size"));
+    }
     #[test]
     fn test_file_not_exists_error() {
         let cipher = FileStreamCipher::default();
