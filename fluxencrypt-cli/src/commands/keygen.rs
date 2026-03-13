@@ -10,6 +10,8 @@ use fluxencrypt::keys::{
     storage::{KeyStorage, StorageOptions},
     KeyPair,
 };
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 /// Generate a new RSA key pair
@@ -346,8 +348,37 @@ fn save_keys_base64(
 
     std::fs::write(public_key_path, public_b64)
         .map_err(|e| anyhow::anyhow!("Failed to save public key: {}", e))?;
-    std::fs::write(private_key_path, private_b64)
-        .map_err(|e| anyhow::anyhow!("Failed to save private key: {}", e))?;
+    write_private_key_securely(private_key_path, &private_b64)?;
+
+    Ok(())
+}
+
+/// Write private key data with restrictive file permissions.
+fn write_private_key_securely(
+    private_key_path: &Path,
+    private_key_data: &str,
+) -> anyhow::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(private_key_path)
+            .map_err(|e| anyhow::anyhow!("Failed to save private key: {}", e))?;
+
+        file.write_all(private_key_data.as_bytes())
+            .map_err(|e| anyhow::anyhow!("Failed to save private key: {}", e))?;
+    }
+
+    #[cfg(not(unix))]
+    {
+        std::fs::write(private_key_path, private_key_data)
+            .map_err(|e| anyhow::anyhow!("Failed to save private key: {}", e))?;
+    }
 
     Ok(())
 }

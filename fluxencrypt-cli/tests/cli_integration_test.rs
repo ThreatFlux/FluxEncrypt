@@ -41,7 +41,9 @@ fn test_keygen_base64_encoding() {
         .arg(output_dir)
         .arg("-n")
         .arg("test_b64")
-        .arg("--base64");
+        .arg("--base64")
+        .arg("--key-size")
+        .arg("2048");
 
     cmd.assert()
         .success()
@@ -54,6 +56,31 @@ fn test_keygen_base64_encoding() {
     // Should be valid base64
     use base64::{engine::general_purpose::STANDARD, Engine as _};
     assert!(STANDARD.decode(&pub_key).is_ok());
+}
+
+#[cfg(unix)]
+#[test]
+fn test_keygen_base64_private_key_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp_dir = tempdir().unwrap();
+    let output_dir = temp_dir.path();
+
+    let mut cmd = get_cli_command();
+    cmd.arg("keygen")
+        .arg("-o")
+        .arg(output_dir)
+        .arg("-n")
+        .arg("test_b64_perm")
+        .arg("--base64")
+        .arg("--key-size")
+        .arg("2048");
+
+    cmd.assert().success();
+
+    let metadata = fs::metadata(output_dir.join("test_b64_perm.pem")).unwrap();
+    let mode = metadata.permissions().mode() & 0o777;
+    assert_eq!(mode, 0o600);
 }
 
 #[test]
