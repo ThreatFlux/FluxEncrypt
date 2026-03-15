@@ -7,7 +7,7 @@
 use crate::error::{FluxError, Result};
 use crate::keys::{PrivateKey, PublicKey};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
-use zeroize::ZeroizeOnDrop;
+use zeroize::Zeroize;
 
 /// Supported secret formats in environment variables
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,17 +25,19 @@ pub enum SecretFormat {
 }
 
 /// A secret loaded from an environment variable
-#[derive(ZeroizeOnDrop)]
-#[allow(unused_assignments)] // False positive: fields are used via getter methods
 pub struct EnvSecret {
     /// The raw secret data
     data: Vec<u8>,
     /// The detected or specified format
-    #[zeroize(skip)]
     format: SecretFormat,
     /// The original string value (for debugging)
-    #[zeroize(skip)]
     original: String,
+}
+
+impl Drop for EnvSecret {
+    fn drop(&mut self) {
+        self.data.zeroize();
+    }
 }
 
 impl std::fmt::Debug for EnvSecret {
