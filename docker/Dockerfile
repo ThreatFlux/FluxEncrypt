@@ -40,6 +40,9 @@ FROM gcr.io/distroless/cc-debian12:nonroot
 # Copy the binary from builder stage
 COPY --from=builder /usr/src/fluxencrypt/target/release/fluxencrypt-cli /usr/local/bin/fluxencrypt-cli
 
+# Set writable working directory for nonroot user (uid 65534)
+WORKDIR /home/nonroot
+
 # Default command (nonroot tag runs as uid 65534 by default)
 ENTRYPOINT ["fluxencrypt-cli"]
 CMD ["--help"]

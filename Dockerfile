@@ -50,6 +50,9 @@ FROM gcr.io/distroless/cc-debian12:nonroot
 # Copy binary from builder
 COPY --from=builder /app/target/release/fluxencrypt-cli /usr/local/bin/fluxencrypt
 
+# Set writable working directory for nonroot user (uid 65534)
+WORKDIR /home/nonroot
+
 # Set version label
 ARG VERSION=latest
 LABEL version="${VERSION}"
