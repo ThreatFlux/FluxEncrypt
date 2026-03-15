@@ -5,7 +5,6 @@ FROM rust:1.89-slim AS builder
 # Install required dependencies (versions managed by base image)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkgconf \
-    libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -45,28 +44,14 @@ COPY fluxencrypt-async/src ./fluxencrypt-async/src
 RUN touch fluxencrypt/src/lib.rs fluxencrypt-cli/src/main.rs fluxencrypt-async/src/lib.rs && \
     cargo build --release --package fluxencrypt-cli
 
-# Stage 2: Create minimal runtime image
-FROM debian:trixie-slim
-
-# Install runtime dependencies (versions managed by base image)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    libssl3t64 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Create non-root user
-RUN useradd -m -s /bin/bash fluxencrypt
+# Stage 2: Create minimal runtime image (distroless eliminates OS-level CVEs)
+FROM gcr.io/distroless/cc-debian12:nonroot
 
 # Copy binary from builder
 COPY --from=builder /app/target/release/fluxencrypt-cli /usr/local/bin/fluxencrypt
 
-# Set ownership and permissions
-RUN chown fluxencrypt:fluxencrypt /usr/local/bin/fluxencrypt && \
-    chmod 755 /usr/local/bin/fluxencrypt
-
-# Switch to non-root user
-USER fluxencrypt
-WORKDIR /home/fluxencrypt
+# Set writable working directory for nonroot user (uid 65534)
+WORKDIR /home/nonroot
 
 # Set version label
 ARG VERSION=latest
@@ -74,6 +59,6 @@ LABEL version="${VERSION}"
 LABEL description="FluxEncrypt - High-performance Rust encryption SDK"
 LABEL maintainer="ThreatFlux"
 
-# Default command
+# Default command (nonroot tag runs as uid 65534 by default)
 ENTRYPOINT ["/usr/local/bin/fluxencrypt"]
 CMD ["--help"]
