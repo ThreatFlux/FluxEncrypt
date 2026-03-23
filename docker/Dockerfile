@@ -2,14 +2,12 @@
 # Multi-stage build for optimized production image
 
 # Build stage
-FROM rust:1.75-slim as builder
+FROM rust:1.89-slim AS builder
 
-# Install build dependencies with pinned versions and security best practices
+# Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    pkg-config=1.8.1-1 \
-    libssl-dev=3.0.11-1~deb12u2 \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+    pkgconf \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /usr/src/fluxencrypt
@@ -36,39 +34,18 @@ COPY . .
 # Build the application
 RUN cargo build --release --bin fluxencrypt-cli
 
-# Runtime stage
-FROM debian:bookworm-slim
-
-# Install runtime dependencies with pinned versions and security best practices
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates=20230311 \
-    libssl3=3.0.11-1~deb12u2 \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean \
-    && useradd -r -s /bin/false fluxencrypt
+# Runtime stage (distroless eliminates OS-level CVEs)
+FROM gcr.io/distroless/cc-debian12:nonroot
 
 # Copy the binary from builder stage
 COPY --from=builder /usr/src/fluxencrypt/target/release/fluxencrypt-cli /usr/local/bin/fluxencrypt-cli
 
-# Set proper permissions
-RUN chmod +x /usr/local/bin/fluxencrypt-cli
+# Set writable working directory for nonroot user (uid 65534)
+WORKDIR /home/nonroot
 
-# Create data directory
-RUN mkdir -p /data && chown fluxencrypt:fluxencrypt /data
-
-# Switch to non-root user
-USER fluxencrypt
-
-# Set working directory
-WORKDIR /data
-
-# Default command
+# Default command (nonroot tag runs as uid 65534 by default)
 ENTRYPOINT ["fluxencrypt-cli"]
 CMD ["--help"]
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD fluxencrypt-cli --version || exit 1
 
 # Labels for metadata
 LABEL org.opencontainers.image.title="FluxEncrypt"

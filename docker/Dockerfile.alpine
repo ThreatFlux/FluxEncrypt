@@ -2,14 +2,12 @@
 # Minimal image based on Alpine Linux for smaller footprint
 
 # Build stage
-FROM rust:1.75-alpine as builder
+FROM rust:1.89-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache \
     musl-dev \
-    pkgconfig \
-    openssl-dev \
-    openssl-libs-static
+    pkgconfig
 
 # Set working directory
 WORKDIR /usr/src/fluxencrypt
@@ -38,7 +36,7 @@ COPY . .
 RUN cargo build --release --bin fluxencrypt-cli
 
 # Runtime stage
-FROM alpine:3.18
+FROM alpine:3.21
 
 # Install runtime dependencies
 RUN apk add --no-cache \
@@ -63,10 +61,6 @@ WORKDIR /data
 # Default command
 ENTRYPOINT ["fluxencrypt-cli"]
 CMD ["--help"]
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD fluxencrypt-cli --version || exit 1
 
 # Labels for metadata
 LABEL org.opencontainers.image.title="FluxEncrypt Alpine"
