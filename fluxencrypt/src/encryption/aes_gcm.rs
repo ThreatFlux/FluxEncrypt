@@ -5,7 +5,7 @@
 
 use crate::config::CipherSuite;
 use crate::error::{FluxError, Result};
-use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_128_GCM, AES_256_GCM};
+use ring::aead::{AES_128_GCM, AES_256_GCM, Aad, LessSafeKey, Nonce, UnboundKey};
 use ring::rand::{SecureRandom, SystemRandom};
 use zeroize::ZeroizeOnDrop;
 

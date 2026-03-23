@@ -7,8 +7,8 @@ use colored::*;
 use dialoguer::{Confirm, Input, Select};
 use fluxencrypt::config::RsaKeySize;
 use fluxencrypt::keys::{
-    storage::{KeyStorage, StorageOptions},
     KeyPair,
+    storage::{KeyStorage, StorageOptions},
 };
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -342,7 +342,7 @@ fn save_keys_base64(
             .map_err(|e| anyhow::anyhow!("Failed to encode private key: {}", e))?
     };
 
-    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
     let public_b64 = STANDARD.encode(&public_pem);
     let private_b64 = STANDARD.encode(&private_pem);
 

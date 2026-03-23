@@ -6,7 +6,7 @@
 
 use crate::error::{FluxError, Result};
 use crate::keys::{PrivateKey, PublicKey};
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use zeroize::ZeroizeOnDrop;
 
 /// Supported secret formats in environment variables
@@ -181,10 +181,10 @@ impl EnvSecret {
             }
             _ => {
                 // Try to parse as PEM first, then other formats
-                if let Ok(pem_str) = self.as_string() {
-                    if let Ok(key) = crate::keys::parsing::parse_public_key_from_str(&pem_str) {
-                        return Ok(key);
-                    }
+                if let Ok(pem_str) = self.as_string()
+                    && let Ok(key) = crate::keys::parsing::parse_public_key_from_str(&pem_str)
+                {
+                    return Ok(key);
                 }
 
                 // TODO: Try other formats (DER, etc.)
@@ -205,10 +205,10 @@ impl EnvSecret {
             }
             _ => {
                 // Try to parse as PEM first, then other formats
-                if let Ok(pem_str) = self.as_string() {
-                    if let Ok(key) = crate::keys::parsing::parse_private_key_from_str(&pem_str) {
-                        return Ok(key);
-                    }
+                if let Ok(pem_str) = self.as_string()
+                    && let Ok(key) = crate::keys::parsing::parse_private_key_from_str(&pem_str)
+                {
+                    return Ok(key);
                 }
 
                 // TODO: Try other formats (DER, PKCS#8, etc.)

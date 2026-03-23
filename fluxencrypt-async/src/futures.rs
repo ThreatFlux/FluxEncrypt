@@ -231,8 +231,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     #[tokio::test]
     async fn test_async_batch() {
@@ -307,11 +307,7 @@ mod tests {
                 let counter = counter_clone.clone();
                 async move {
                     let count = counter.fetch_add(1, Ordering::Relaxed);
-                    if count < 2 {
-                        Err("not ready")
-                    } else {
-                        Ok(42)
-                    }
+                    if count < 2 { Err("not ready") } else { Ok(42) }
                 }
             },
             5,

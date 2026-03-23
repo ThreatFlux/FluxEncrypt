@@ -42,7 +42,7 @@ serde_json = { workspace = true }
 base64 = { workspace = true }
 
 # File and path utilities
-walkdir = "2.3"
+walkdir = "2.5"
 glob = "0.3"
 
 # System utilities
@@ -53,8 +53,8 @@ rayon = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
-assert_cmd = "2.0"
-predicates = "3.0"
+assert_cmd = "2.2"
+predicates = "3.1"
 
 [features]
 default = ["parallel"]

@@ -268,15 +268,19 @@ mod tests {
 
         // Test invalid PEM
         let invalid_pem = b"not a pem key";
-        assert!(parser
-            .parse_public_key(invalid_pem, KeyFormat::Pem)
-            .is_err());
+        assert!(
+            parser
+                .parse_public_key(invalid_pem, KeyFormat::Pem)
+                .is_err()
+        );
 
         // Test invalid DER
         let invalid_der = b"not der data";
-        assert!(parser
-            .parse_public_key(invalid_der, KeyFormat::Der)
-            .is_err());
+        assert!(
+            parser
+                .parse_public_key(invalid_der, KeyFormat::Der)
+                .is_err()
+        );
     }
 
     #[test]
@@ -285,9 +289,11 @@ mod tests {
         let dummy_data = b"ssh-rsa ...";
 
         assert!(parser.parse_public_key(dummy_data, KeyFormat::Ssh).is_err());
-        assert!(parser
-            .parse_private_key(dummy_data, KeyFormat::Ssh)
-            .is_err());
+        assert!(
+            parser
+                .parse_private_key(dummy_data, KeyFormat::Ssh)
+                .is_err()
+        );
     }
 
     #[test]

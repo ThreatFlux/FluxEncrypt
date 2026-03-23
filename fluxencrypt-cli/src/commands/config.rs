@@ -440,11 +440,7 @@ fn display_config_section(title: &str, items: &[(&str, &Option<String>)]) {
 }
 
 fn format_bool(value: bool) -> colored::ColoredString {
-    if value {
-        "true".green()
-    } else {
-        "false".red()
-    }
+    if value { "true".green() } else { "false".red() }
 }
 
 fn parse_bool(value: &str) -> anyhow::Result<bool> {

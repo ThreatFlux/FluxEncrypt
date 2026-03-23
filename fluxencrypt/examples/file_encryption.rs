@@ -4,7 +4,7 @@
 //! streaming capabilities for efficient handling of large files.
 
 use fluxencrypt::keys::KeyPair;
-use fluxencrypt::{stream::FileStreamCipher, Config};
+use fluxencrypt::{Config, stream::FileStreamCipher};
 use std::fs;
 use std::path::Path;
 use tempfile::tempdir;

@@ -214,7 +214,7 @@ impl StreamCipher {
 
     /// Call progress callback if provided
     fn call_progress_callback(&self, progress: &Option<ProgressCallback>, total_processed: u64) {
-        if let Some(ref callback) = progress {
+        if let Some(callback) = progress {
             callback(total_processed, total_processed);
         }
     }
@@ -391,10 +391,12 @@ mod tests {
 
         let result = cipher.decrypt_stream(keypair.private_key(), input, output, None);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid encrypted chunk size"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid encrypted chunk size")
+        );
     }
 
     #[test]
@@ -411,10 +413,12 @@ mod tests {
 
         let result = cipher.decrypt_stream(keypair.private_key(), input, output, None);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid encrypted chunk size"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid encrypted chunk size")
+        );
     }
     #[test]
     fn test_file_not_exists_error() {

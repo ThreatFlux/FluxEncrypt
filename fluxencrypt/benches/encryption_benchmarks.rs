@@ -1,14 +1,16 @@
 //! Comprehensive benchmark suite for FluxEncrypt encryption operations.
+#![allow(clippy::result_large_err)]
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use fluxencrypt::encryption::aes_gcm::{AesGcmCipher, AesKey};
 use fluxencrypt::keys::KeyPair;
 use fluxencrypt::stream::FileStreamCipher;
 use fluxencrypt::{
-    config::{CipherSuite, RsaKeySize},
     Config, Cryptum, HybridCipher,
+    config::{CipherSuite, RsaKeySize},
 };
 use std::fs;
+use std::hint::black_box;
 use tempfile::tempdir;
 
 fn bench_key_generation(c: &mut Criterion) {

@@ -255,19 +255,23 @@ mod tests {
     }
 
     #[test]
+    #[allow(unsafe_code)]
     fn test_has_var() {
-        env::set_var("TEST_VAR_EXISTS", "value");
+        // SAFETY: Test-only; no other threads access these env vars.
+        unsafe { env::set_var("TEST_VAR_EXISTS", "value") };
 
         let provider = EnvSecretProvider::new();
         assert!(provider.has_var("TEST_VAR_EXISTS"));
         assert!(!provider.has_var("TEST_VAR_DOES_NOT_EXIST"));
 
-        env::remove_var("TEST_VAR_EXISTS");
+        unsafe { env::remove_var("TEST_VAR_EXISTS") };
     }
 
     #[test]
+    #[allow(unsafe_code)]
     fn test_get_string() {
-        env::set_var("TEST_STRING", "hello world");
+        // SAFETY: Test-only; no other threads access these env vars.
+        unsafe { env::set_var("TEST_STRING", "hello world") };
 
         let provider = EnvSecretProvider::new();
         let result = provider.get_string("TEST_STRING").unwrap();
@@ -276,12 +280,14 @@ mod tests {
         let result = provider.get_string("NONEXISTENT");
         assert!(result.is_err());
 
-        env::remove_var("TEST_STRING");
+        unsafe { env::remove_var("TEST_STRING") };
     }
 
     #[test]
+    #[allow(unsafe_code)]
     fn test_optional_methods() {
-        env::set_var("TEST_OPTIONAL", "value");
+        // SAFETY: Test-only; no other threads access these env vars.
+        unsafe { env::set_var("TEST_OPTIONAL", "value") };
 
         let provider = EnvSecretProvider::new();
 
@@ -291,7 +297,7 @@ mod tests {
         let result = provider.get_optional_string("NONEXISTENT");
         assert_eq!(result, None);
 
-        env::remove_var("TEST_OPTIONAL");
+        unsafe { env::remove_var("TEST_OPTIONAL") };
     }
 
     #[test]

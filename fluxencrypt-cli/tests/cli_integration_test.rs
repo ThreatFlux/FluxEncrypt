@@ -54,7 +54,7 @@ fn test_keygen_base64_encoding() {
     // Base64 encoded PEM should not start with "-----BEGIN"
     assert!(!pub_key.starts_with("-----BEGIN"));
     // Should be valid base64
-    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
     assert!(STANDARD.decode(&pub_key).is_ok());
 }
 
@@ -115,7 +115,7 @@ fn test_encrypt_string_with_data_flag() {
     let encrypted_line = lines.last().unwrap();
 
     // Should be valid base64
-    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
     assert!(STANDARD.decode(encrypted_line).is_ok());
 }
 
@@ -155,7 +155,7 @@ fn test_encrypt_decrypt_roundtrip_base64() {
 
     // Verify encrypted file contains base64
     let encrypted_content = fs::read_to_string(&encrypted_file).unwrap();
-    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
     assert!(STANDARD.decode(&encrypted_content).is_ok());
 
     // Decrypt from file
@@ -214,7 +214,7 @@ fn test_encrypt_raw_binary_mode() {
     // Raw binary should not be valid UTF-8 string (most likely)
     // or if it is, it shouldn't be valid base64
     if let Ok(s) = raw_str {
-        use base64::{engine::general_purpose::STANDARD, Engine as _};
+        use base64::{Engine as _, engine::general_purpose::STANDARD};
         assert!(STANDARD.decode(&s).is_err() || s.contains('\0'));
     }
 
@@ -363,7 +363,7 @@ fn test_file_encryption_base64_default() {
 
     // Verify encrypted file is base64
     let encrypted_content = fs::read_to_string(&encrypted_file).unwrap();
-    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
     assert!(STANDARD.decode(&encrypted_content).is_ok());
 
     // Decrypt file
@@ -414,7 +414,7 @@ fn test_stdin_stdout_encryption() {
     let encrypted = lines.last().unwrap();
 
     // Should be valid base64
-    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
     assert!(STANDARD.decode(encrypted).is_ok());
 
     // Decrypt from stdin

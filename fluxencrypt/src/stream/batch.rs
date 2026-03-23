@@ -7,10 +7,10 @@
 use crate::config::Config;
 use crate::error::{FluxError, Result};
 use crate::keys::{PrivateKey, PublicKey};
-use crate::stream::{cipher::ProgressCallback, FileStreamCipher};
+use crate::stream::{FileStreamCipher, cipher::ProgressCallback};
 use std::path::{Component, Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Type alias for batch operation results
 type BatchOperationResult = Result<(usize, u64, Vec<(PathBuf, String)>)>;

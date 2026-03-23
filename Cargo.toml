@@ -1,5 +1,5 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 members = [
     "fluxencrypt",
     "fluxencrypt-cli",
@@ -10,13 +10,13 @@ members = [
 version = "0.7.2"
 authors = ["Wyatt Roersma", "Claude Code", "Codex"]
 license = "MIT"
-edition = "2021"
+edition = "2024"
 repository = "https://github.com/ThreatFlux/fluxencrypt"
 homepage = "https://github.com/ThreatFlux/fluxencrypt"
 documentation = "https://docs.rs/fluxencrypt"
 keywords = ["encryption", "cryptography", "security", "aes", "rsa"]
 categories = ["cryptography", "command-line-utilities"]
-rust-version = "1.89.0"
+rust-version = "1.94.0"
 
 [workspace.dependencies]
 # Core cryptography
@@ -38,27 +38,27 @@ thiserror = "2.0"
 anyhow = "1.0"
 
 # Performance and concurrency
-rayon = "1.10"
-tokio = { version = "1.42", features = ["full"] }
+rayon = "1.11"
+tokio = { version = "1.50", features = ["full"] }
 futures = "0.3"
 
 # CLI utilities
-clap = { version = "4.5", features = ["derive", "cargo"] }
-indicatif = "0.17"
-colored = "2.1"
-dialoguer = "0.11"
+clap = { version = "4.6", features = ["derive", "cargo"] }
+indicatif = "0.18"
+colored = "3.1"
+dialoguer = "0.12"
 
 # Logging
-env_logger = "0.10"
+env_logger = "0.11"
 log = "0.4"
 
 # Testing
-criterion = { version = "0.5", features = ["html_reports"] }
-proptest = "1.0"
+criterion = { version = "0.8", features = ["html_reports"] }
+proptest = "1.10"
 hex = "0.4"
 
 # Development utilities
-tempfile = "3.0"
+tempfile = "3.27"
 rand = "0.8"
 
 [profile.release]

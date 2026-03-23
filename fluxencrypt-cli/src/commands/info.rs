@@ -67,26 +67,26 @@ fn display_detailed_file_info(metadata: &fs::Metadata) {
 }
 
 fn display_timestamps(metadata: &fs::Metadata) {
-    if let Ok(created) = metadata.created() {
-        if let Ok(duration) = created.duration_since(UNIX_EPOCH) {
-            let timestamp = duration.as_secs();
-            println!(
-                "{} Created: {} (Unix timestamp)",
-                "📅".blue(),
-                timestamp.to_string().cyan()
-            );
-        }
+    if let Ok(created) = metadata.created()
+        && let Ok(duration) = created.duration_since(UNIX_EPOCH)
+    {
+        let timestamp = duration.as_secs();
+        println!(
+            "{} Created: {} (Unix timestamp)",
+            "📅".blue(),
+            timestamp.to_string().cyan()
+        );
     }
 
-    if let Ok(modified) = metadata.modified() {
-        if let Ok(duration) = modified.duration_since(UNIX_EPOCH) {
-            let timestamp = duration.as_secs();
-            println!(
-                "{} Modified: {} (Unix timestamp)",
-                "✏️".yellow(),
-                timestamp.to_string().cyan()
-            );
-        }
+    if let Ok(modified) = metadata.modified()
+        && let Ok(duration) = modified.duration_since(UNIX_EPOCH)
+    {
+        let timestamp = duration.as_secs();
+        println!(
+            "{} Modified: {} (Unix timestamp)",
+            "✏️".yellow(),
+            timestamp.to_string().cyan()
+        );
     }
 }
 
@@ -345,10 +345,10 @@ fn detect_file_signature(data: &[u8]) -> &'static str {
         }
     }
 
-    if data.len() >= 3 {
-        if let [0xEF, 0xBB, 0xBF] = &data[0..3] {
-            return "UTF-8 with BOM";
-        }
+    if data.len() >= 3
+        && let [0xEF, 0xBB, 0xBF] = &data[0..3]
+    {
+        return "UTF-8 with BOM";
     }
 
     if data.len() >= 2 {

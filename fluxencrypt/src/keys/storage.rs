@@ -404,9 +404,11 @@ mod tests {
 
         // Test with non-existent file - should succeed
         let options = StorageOptions::default();
-        assert!(storage
-            .check_file_overwrite_policy(&key_path, &options)
-            .is_ok());
+        assert!(
+            storage
+                .check_file_overwrite_policy(&key_path, &options)
+                .is_ok()
+        );
 
         // Create the file first
         std::fs::write(&key_path, "test content").unwrap();
@@ -420,9 +422,11 @@ mod tests {
             overwrite: true,
             ..Default::default()
         };
-        assert!(storage
-            .check_file_overwrite_policy(&key_path, &options_overwrite)
-            .is_ok());
+        assert!(
+            storage
+                .check_file_overwrite_policy(&key_path, &options_overwrite)
+                .is_ok()
+        );
     }
 
     #[test]

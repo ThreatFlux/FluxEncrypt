@@ -2,6 +2,7 @@
 //!
 //! These tests verify that cryptographic properties hold for arbitrary inputs,
 //! providing stronger assurance than example-based tests alone.
+#![allow(clippy::result_large_err)]
 
 use fluxencrypt::config::{CipherSuite, RsaKeySize};
 use fluxencrypt::encryption::aes_gcm::{AesGcmCipher, AesKey};
