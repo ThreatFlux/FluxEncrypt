@@ -321,10 +321,10 @@ pub async fn encrypt_multiple_async(
     let mut results = Vec::new();
 
     for chunk in data_chunks {
-        if futures.len() >= max_concurrent {
-            if let Some(result) = futures.next().await {
-                results.push(result);
-            }
+        if futures.len() >= max_concurrent
+            && let Some(result) = futures.next().await
+        {
+            results.push(result);
         }
 
         // Clone chunk to avoid lifetime issues
@@ -355,10 +355,10 @@ pub async fn decrypt_multiple_async(
     let mut results = Vec::new();
 
     for chunk in ciphertext_chunks {
-        if futures.len() >= max_concurrent {
-            if let Some(result) = futures.next().await {
-                results.push(result);
-            }
+        if futures.len() >= max_concurrent
+            && let Some(result) = futures.next().await
+        {
+            results.push(result);
         }
 
         // Clone chunk to avoid lifetime issues

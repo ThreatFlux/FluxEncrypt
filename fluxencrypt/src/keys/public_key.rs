@@ -1,8 +1,8 @@
 //! RSA public key functionality.
 
 use crate::error::{FluxError, Result};
-use rsa::traits::PublicKeyParts;
 use rsa::RsaPublicKey;
+use rsa::traits::PublicKeyParts;
 
 /// An RSA public key
 #[derive(Clone)]

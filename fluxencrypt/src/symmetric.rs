@@ -35,7 +35,7 @@
 use crate::config::CipherSuite;
 use crate::encryption::aes_gcm::{AesGcmCipher, AesKey};
 use crate::error::{FluxError, Result};
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 
 /// A simple symmetric encryption cipher for secret storage.
 ///

@@ -1,6 +1,6 @@
 //! Integration tests for base64 encoding/decoding functionality.
 
-use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use fluxencrypt::config::RsaKeySize;
 use fluxencrypt::cryptum;
 use fluxencrypt::keys::KeyPair;
@@ -124,8 +124,8 @@ fn test_4096_bit_rsa_default() {
     // RSA-4096 has a 512-byte (4096-bit) modulus
 
     // Parse the key to verify size
-    use rsa::traits::PublicKeyParts;
     use rsa::RsaPublicKey;
+    use rsa::traits::PublicKeyParts;
 
     let public_key: RsaPublicKey = keypair.public_key().inner().clone();
     let modulus_bits = public_key.n().bits();

@@ -1,8 +1,8 @@
 //! Key management example showing key generation, storage, and loading.
 
 use fluxencrypt::keys::{
-    storage::{KeyStorage, StorageOptions},
     KeyPair,
+    storage::{KeyStorage, StorageOptions},
 };
 use tempfile::tempdir;
 

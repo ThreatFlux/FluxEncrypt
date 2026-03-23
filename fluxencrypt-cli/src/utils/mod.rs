@@ -83,7 +83,7 @@ fn decode_key_data_if_needed(key_data: &[u8]) -> anyhow::Result<Vec<u8>> {
     }
 
     // Try to decode as base64
-    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
     match STANDARD.decode(key_data) {
         Ok(decoded) => Ok(decoded),
         Err(_) => Ok(key_data.to_vec()), // Not base64, use as-is

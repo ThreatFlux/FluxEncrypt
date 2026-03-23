@@ -39,6 +39,7 @@
 #![deny(missing_docs)]
 #![deny(unsafe_code)]
 #![warn(clippy::all)]
+#![allow(clippy::result_large_err)]
 #![warn(rust_2018_idioms)]
 
 pub mod futures;

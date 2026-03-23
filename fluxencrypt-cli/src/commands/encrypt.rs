@@ -4,7 +4,7 @@ use crate::commands::CommandResult;
 use base64::prelude::*;
 use clap::Args;
 use colored::*;
-use fluxencrypt::{cryptum, Cryptum};
+use fluxencrypt::{Cryptum, cryptum};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::fs;
 use std::io::{self, Read};

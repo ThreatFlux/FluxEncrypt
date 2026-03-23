@@ -2,8 +2,8 @@
 
 use crate::error::{FluxError, Result};
 use crate::keys::PublicKey;
-use rsa::traits::{PrivateKeyParts, PublicKeyParts};
 use rsa::RsaPrivateKey;
+use rsa::traits::{PrivateKeyParts, PublicKeyParts};
 use zeroize::ZeroizeOnDrop;
 
 /// An RSA private key that is automatically zeroized when dropped

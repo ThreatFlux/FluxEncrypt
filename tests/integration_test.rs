@@ -5,8 +5,8 @@
 
 use fluxencrypt::env::EnvSecretProvider;
 use fluxencrypt::keys::{
-    storage::{KeyStorage, StorageOptions},
     KeyPair,
+    storage::{KeyStorage, StorageOptions},
 };
 use fluxencrypt::stream::FileStreamCipher;
 use fluxencrypt::{Config, HybridCipher};
@@ -188,8 +188,11 @@ fn test_environment_integration() {
     use std::env;
 
     // Set up test environment variables
-    env::set_var("TEST_PUBLIC_KEY", "test-public-key-data");
-    env::set_var("TEST_PRIVATE_KEY", "test-private-key-data");
+    // SAFETY: Test-only; no other threads access these env vars.
+    unsafe {
+        env::set_var("TEST_PUBLIC_KEY", "test-public-key-data");
+        env::set_var("TEST_PRIVATE_KEY", "test-private-key-data");
+    }
 
     let provider = EnvSecretProvider::with_prefix("TEST");
 
@@ -201,8 +204,11 @@ fn test_environment_integration() {
     assert_eq!(private_result, Some("test-private-key-data".to_string()));
 
     // Clean up
-    env::remove_var("TEST_PUBLIC_KEY");
-    env::remove_var("TEST_PRIVATE_KEY");
+    // SAFETY: Test-only; no other threads access these env vars.
+    unsafe {
+        env::remove_var("TEST_PUBLIC_KEY");
+        env::remove_var("TEST_PRIVATE_KEY");
+    }
 }
 
 #[test]

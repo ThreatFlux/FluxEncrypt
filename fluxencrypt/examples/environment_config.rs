@@ -10,8 +10,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("============================================");
 
     // Set up example environment variables
-    env::set_var("FLUX_PUBLIC_KEY", "example-public-key-data");
-    env::set_var("FLUX_PRIVATE_KEY", "example-private-key-data");
+    // SAFETY: Single-threaded example; no concurrent env var access.
+    unsafe {
+        env::set_var("FLUX_PUBLIC_KEY", "example-public-key-data");
+        env::set_var("FLUX_PRIVATE_KEY", "example-private-key-data");
+    }
 
     let provider = EnvSecretProvider::with_prefix("FLUX");
 
@@ -24,8 +27,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Clean up
-    env::remove_var("FLUX_PUBLIC_KEY");
-    env::remove_var("FLUX_PRIVATE_KEY");
+    // SAFETY: Single-threaded example; no concurrent env var access.
+    unsafe {
+        env::remove_var("FLUX_PUBLIC_KEY");
+        env::remove_var("FLUX_PRIVATE_KEY");
+    }
 
     Ok(())
 }
