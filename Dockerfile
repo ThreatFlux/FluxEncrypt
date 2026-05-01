@@ -3,6 +3,7 @@
 FROM docker.io/threatflux/rust-cicd-template:base-rust-latest AS builder
 
 # Install required dependencies (versions managed by base image)
+USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkgconf \
     libssl-dev \
