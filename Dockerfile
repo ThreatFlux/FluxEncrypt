@@ -1,8 +1,9 @@
 # Multi-stage build for FluxEncrypt
 # Stage 1: Build the application
-FROM rust:1.89-slim AS builder
+FROM docker.io/threatflux/rust-cicd-template:base-rust-latest AS builder
 
 # Install required dependencies (versions managed by base image)
+USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkgconf \
     libssl-dev \

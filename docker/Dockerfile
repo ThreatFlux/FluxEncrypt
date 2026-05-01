@@ -2,9 +2,10 @@
 # Multi-stage build for optimized production image
 
 # Build stage
-FROM rust:1.75-slim as builder
+FROM docker.io/threatflux/rust-cicd-template:base-rust-latest as builder
 
 # Install build dependencies with pinned versions and security best practices
+USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config=1.8.1-1 \
     libssl-dev=3.0.11-1~deb12u2 \
@@ -40,6 +41,7 @@ RUN cargo build --release --bin fluxencrypt-cli
 FROM debian:bookworm-slim
 
 # Install runtime dependencies with pinned versions and security best practices
+USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates=20230311 \
     libssl3=3.0.11-1~deb12u2 \
