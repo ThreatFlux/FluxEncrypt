@@ -2,7 +2,7 @@
 # Minimal image based on Alpine Linux for smaller footprint
 
 # Build stage
-FROM rust:1.75-alpine as builder
+FROM docker.io/threatflux/rust-cicd-template:base-rust-latest as builder
 
 # Install build dependencies
 RUN apk add --no-cache \
