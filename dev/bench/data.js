@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776948092490,
+  "lastUpdate": 1777647793648,
   "repoUrl": "https://github.com/ThreatFlux/FluxEncrypt",
   "entries": {
     "Benchmark": [
@@ -413,6 +413,416 @@ window.BENCHMARK_DATA = {
             "name": "edge_cases/single_byte_decrypt",
             "value": 331,
             "range": "± 10",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "ThreatFlux",
+            "username": "ThreatFlux"
+          },
+          "committer": {
+            "name": "ThreatFlux",
+            "username": "ThreatFlux"
+          },
+          "id": "c8f05722e209c72795e403977d411931bdaaf776",
+          "message": "chore: use rust-cicd-template base image",
+          "timestamp": "2026-04-23T12:20:42Z",
+          "url": "https://github.com/ThreatFlux/FluxEncrypt/pull/10/commits/c8f05722e209c72795e403977d411931bdaaf776"
+        },
+        "date": 1777647793232,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "key_generation/rsa/2048",
+            "value": 203321309,
+            "range": "± 162024169",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "key_generation/rsa/3072",
+            "value": 774262813,
+            "range": "± 630428352",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "key_generation/rsa/4096",
+            "value": 2724071086,
+            "range": "± 1733552181",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "encryption/hybrid/1024",
+            "value": 238137,
+            "range": "± 7659",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "encryption/hybrid/8192",
+            "value": 239082,
+            "range": "± 3104",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "encryption/hybrid/65536",
+            "value": 251020,
+            "range": "± 724",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "encryption/hybrid/524288",
+            "value": 344217,
+            "range": "± 9381",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "decryption/hybrid/1024",
+            "value": 1967125,
+            "range": "± 3520",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "decryption/hybrid/8192",
+            "value": 1979639,
+            "range": "± 7352",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "decryption/hybrid/65536",
+            "value": 1990204,
+            "range": "± 4102",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "decryption/hybrid/524288",
+            "value": 2072255,
+            "range": "± 3222",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cipher_suites/encrypt/Aes128Gcm",
+            "value": 238756,
+            "range": "± 968",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cipher_suites/encrypt/Aes256Gcm",
+            "value": 239052,
+            "range": "± 651",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "configurations/encrypt/default",
+            "value": 239229,
+            "range": "± 597",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "configurations/encrypt/small_chunks",
+            "value": 238614,
+            "range": "± 609",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "configurations/encrypt/large_chunks",
+            "value": 239271,
+            "range": "± 1358",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "configurations/encrypt/no_hw_accel",
+            "value": 238741,
+            "range": "± 953",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "aes_gcm/aes128_encrypt/1024",
+            "value": 1091,
+            "range": "± 17",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "aes_gcm/aes256_encrypt/1024",
+            "value": 1127,
+            "range": "± 13",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "aes_gcm/aes128_decrypt/1024",
+            "value": 497,
+            "range": "± 29",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "aes_gcm/aes256_decrypt/1024",
+            "value": 509,
+            "range": "± 6",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "aes_gcm/aes128_encrypt/8192",
+            "value": 2071,
+            "range": "± 7",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "aes_gcm/aes256_encrypt/8192",
+            "value": 2230,
+            "range": "± 27",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "aes_gcm/aes128_decrypt/8192",
+            "value": 1561,
+            "range": "± 5",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "aes_gcm/aes256_decrypt/8192",
+            "value": 1651,
+            "range": "± 34",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "aes_gcm/aes128_encrypt/65536",
+            "value": 10968,
+            "range": "± 28",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "aes_gcm/aes256_encrypt/65536",
+            "value": 12137,
+            "range": "± 64",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "aes_gcm/aes128_decrypt/65536",
+            "value": 11331,
+            "range": "± 222",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "aes_gcm/aes256_decrypt/65536",
+            "value": 12139,
+            "range": "± 240",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "aes_gcm/aes128_encrypt/524288",
+            "value": 78784,
+            "range": "± 209",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "aes_gcm/aes256_encrypt/524288",
+            "value": 88519,
+            "range": "± 273",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "aes_gcm/aes128_decrypt/524288",
+            "value": 91605,
+            "range": "± 329",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "aes_gcm/aes256_decrypt/524288",
+            "value": 97518,
+            "range": "± 543",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "aes_key_generation/aes128",
+            "value": 576,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "aes_key_generation/aes256",
+            "value": 584,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_operations/file_encrypt/1024",
+            "value": 289042,
+            "range": "± 10856",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_operations/file_decrypt/1024",
+            "value": 2028840,
+            "range": "± 10172",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_operations/file_encrypt/8192",
+            "value": 296870,
+            "range": "± 2099",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_operations/file_decrypt/8192",
+            "value": 2034695,
+            "range": "± 8054",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_operations/file_encrypt/65536",
+            "value": 335775,
+            "range": "± 1132",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_operations/file_decrypt/65536",
+            "value": 2079325,
+            "range": "± 39531",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_operations/file_encrypt/524288",
+            "value": 2360574,
+            "range": "± 9086",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "file_operations/file_decrypt/524288",
+            "value": 16359482,
+            "range": "± 58951",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cryptum_api/cryptum_encrypt/1024",
+            "value": 238517,
+            "range": "± 683",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cryptum_api/cryptum_decrypt/1024",
+            "value": 1962611,
+            "range": "± 3942",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cryptum_api/cryptum_encrypt/8192",
+            "value": 239541,
+            "range": "± 2884",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cryptum_api/cryptum_decrypt/8192",
+            "value": 1964768,
+            "range": "± 49204",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cryptum_api/cryptum_encrypt/65536",
+            "value": 251857,
+            "range": "± 1259",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cryptum_api/cryptum_decrypt/65536",
+            "value": 1980450,
+            "range": "± 6508",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cryptum_api/cryptum_encrypt/524288",
+            "value": 348537,
+            "range": "± 821",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "cryptum_api/cryptum_decrypt/524288",
+            "value": 2067878,
+            "range": "± 4518",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "concurrent_operations/concurrent_encrypt_4_threads",
+            "value": 583894,
+            "range": "± 5791",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "memory_patterns/encrypt/zeros",
+            "value": 250714,
+            "range": "± 1558",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "memory_patterns/encrypt/ones",
+            "value": 254847,
+            "range": "± 726",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "memory_patterns/encrypt/sequential",
+            "value": 250450,
+            "range": "± 1773",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "memory_patterns/encrypt/random_pattern",
+            "value": 251899,
+            "range": "± 2694",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "configuration_overhead/config_default",
+            "value": 1,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "configuration_overhead/config_builder",
+            "value": 12,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "configuration_overhead/cipher_creation",
+            "value": 2,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "configuration_overhead/cryptum_creation",
+            "value": 28,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "edge_cases/empty_data",
+            "value": 877,
+            "range": "± 9",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "edge_cases/single_byte",
+            "value": 924,
+            "range": "± 31",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "edge_cases/large_aad",
+            "value": 6300,
+            "range": "± 72",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "edge_cases/empty_data_decrypt",
+            "value": 290,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "edge_cases/single_byte_decrypt",
+            "value": 332,
+            "range": "± 2",
             "unit": "ns/iter"
           }
         ]
