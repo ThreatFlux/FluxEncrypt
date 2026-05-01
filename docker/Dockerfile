@@ -2,7 +2,7 @@
 # Multi-stage build for optimized production image
 
 # Build stage
-FROM ghcr.io/threatflux/rust-cicd-template:base-rust-latest as builder
+FROM docker.io/threatflux/rust-cicd-template:base-rust-latest as builder
 
 # Install build dependencies with pinned versions and security best practices
 RUN apt-get update && apt-get install -y --no-install-recommends \
