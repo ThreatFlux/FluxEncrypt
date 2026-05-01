@@ -2,7 +2,7 @@
 # Multi-stage build for optimized production image
 
 # Build stage
-FROM rust:1.75-slim as builder
+FROM docker.io/threatflux/rust-cicd-template:base-rust-latest as builder
 
 # Install build dependencies with pinned versions and security best practices
 RUN apt-get update && apt-get install -y --no-install-recommends \
