@@ -1,6 +1,6 @@
 # Multi-stage build for FluxEncrypt
 # Stage 1: Build the application
-FROM docker.io/threatflux/rust-cicd-template:base-rust-latest AS builder
+FROM rust:1.89-slim AS builder
 
 # Install required dependencies (versions managed by base image)
 ARG RUST_TOOLCHAIN=stable
@@ -13,7 +13,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl-dev \
     curl \
     && rm -rf /var/lib/apt/lists/*
-RUN curl -fsSL https://sh.rustup.rs | sh -s -- -y --no-modify-path --default-toolchain ${RUST_TOOLCHAIN} --profile minimal
 
 # Set working directory
 WORKDIR /app

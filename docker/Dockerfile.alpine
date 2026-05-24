@@ -2,7 +2,7 @@
 # Minimal image based on Alpine Linux for smaller footprint
 
 # Build stage
-FROM rust:1.95-alpine as builder
+FROM rust:1.75-alpine as builder
 
 # Install build dependencies
 RUN apk add --no-cache \
