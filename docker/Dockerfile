@@ -2,7 +2,7 @@
 # Multi-stage build for optimized production image
 
 # Build stage
-FROM docker.io/threatflux/rust-cicd-template:base-rust-latest as builder
+FROM rust:1.75-slim as builder
 
 # Install build dependencies with pinned versions and security best practices
 ARG RUST_TOOLCHAIN=stable
@@ -16,7 +16,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
-RUN curl -fsSL https://sh.rustup.rs | sh -s -- -y --no-modify-path --default-toolchain ${RUST_TOOLCHAIN} --profile minimal
 
 # Set working directory
 WORKDIR /usr/src/fluxencrypt
