@@ -2,17 +2,13 @@
 # Multi-stage build for optimized production image
 
 # Build stage
-FROM rust:1.75-slim as builder
+FROM rust:1.95.0-bookworm as builder
 
 # Install build dependencies with pinned versions and security best practices
-ARG RUST_TOOLCHAIN=stable
-ENV RUSTUP_HOME=/opt/rustup \
-    CARGO_HOME=/opt/cargo \
-    PATH=/opt/cargo/bin:$PATH
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config=1.8.1-1 \
-    libssl-dev=3.0.11-1~deb12u2 \
+    libssl-dev=3.0.20-1~deb12u1 \
     curl \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
@@ -27,9 +23,14 @@ COPY fluxencrypt-cli/Cargo.toml ./fluxencrypt-cli/
 COPY fluxencrypt-async/Cargo.toml ./fluxencrypt-async/
 
 # Create dummy source files to cache dependencies
-RUN mkdir -p fluxencrypt/src fluxencrypt-cli/src fluxencrypt-async/src \
+RUN mkdir -p fluxencrypt/src fluxencrypt/examples fluxencrypt/benches fluxencrypt-cli/src fluxencrypt-async/src \
     && echo "fn main() {}" > fluxencrypt-cli/src/main.rs \
     && echo "fn main() {}" > fluxencrypt/src/lib.rs \
+    && echo "fn main() {}" > fluxencrypt/examples/basic_encryption.rs \
+    && echo "fn main() {}" > fluxencrypt/examples/file_encryption.rs \
+    && echo "fn main() {}" > fluxencrypt/examples/key_management.rs \
+    && echo "fn main() {}" > fluxencrypt/examples/environment_config.rs \
+    && echo "fn main() {}" > fluxencrypt/benches/encryption_benchmarks.rs \
     && echo "fn main() {}" > fluxencrypt-async/src/lib.rs
 
 # Build dependencies (this layer will be cached)
@@ -48,8 +49,8 @@ FROM debian:bookworm-slim
 # Install runtime dependencies with pinned versions and security best practices
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates=20230311 \
-    libssl3=3.0.11-1~deb12u2 \
+    ca-certificates=20230311+deb12u1 \
+    libssl3=3.0.20-1~deb12u1 \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean \
     && useradd -r -s /bin/false fluxencrypt

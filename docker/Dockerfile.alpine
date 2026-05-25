@@ -2,7 +2,7 @@
 # Minimal image based on Alpine Linux for smaller footprint
 
 # Build stage
-FROM rust:1.75-alpine as builder
+FROM rust:1.95.0-alpine as builder
 
 # Install build dependencies
 RUN apk add --no-cache \
@@ -21,9 +21,14 @@ COPY fluxencrypt-cli/Cargo.toml ./fluxencrypt-cli/
 COPY fluxencrypt-async/Cargo.toml ./fluxencrypt-async/
 
 # Create dummy source files to cache dependencies
-RUN mkdir -p fluxencrypt/src fluxencrypt-cli/src fluxencrypt-async/src \
+RUN mkdir -p fluxencrypt/src fluxencrypt/examples fluxencrypt/benches fluxencrypt-cli/src fluxencrypt-async/src \
     && echo "fn main() {}" > fluxencrypt-cli/src/main.rs \
     && echo "fn main() {}" > fluxencrypt/src/lib.rs \
+    && echo "fn main() {}" > fluxencrypt/examples/basic_encryption.rs \
+    && echo "fn main() {}" > fluxencrypt/examples/file_encryption.rs \
+    && echo "fn main() {}" > fluxencrypt/examples/key_management.rs \
+    && echo "fn main() {}" > fluxencrypt/examples/environment_config.rs \
+    && echo "fn main() {}" > fluxencrypt/benches/encryption_benchmarks.rs \
     && echo "fn main() {}" > fluxencrypt-async/src/lib.rs
 
 # Build dependencies with static linking
