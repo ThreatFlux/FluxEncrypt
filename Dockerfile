@@ -1,11 +1,7 @@
 # Multi-stage build for FluxEncrypt
 # Stage 1: Build the application
-FROM rust:1.89-slim AS builder
+FROM rust:1.94.0-slim AS builder
 
-ARG RUST_TOOLCHAIN=stable
-ENV RUSTUP_HOME=/opt/rustup \
-    CARGO_HOME=/opt/cargo \
-    PATH=/opt/cargo/bin:$PATH
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkgconf \
