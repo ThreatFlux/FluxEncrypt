@@ -5,6 +5,8 @@
 FROM rust:1.95.0-bookworm AS builder
 
 # Install build dependencies from the Bookworm repositories
+# Track security updates from Bookworm; release artifacts pin the built image digest.
+# hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     libssl-dev \
@@ -34,7 +36,8 @@ RUN mkdir -p fluxencrypt/src fluxencrypt/examples fluxencrypt/benches fluxencryp
 
 # Build dependencies (this layer will be cached)
 RUN cargo build --release --workspace
-RUN rm -rf fluxencrypt/src fluxencrypt-cli/src fluxencrypt-async/src
+RUN rm -rf fluxencrypt/src fluxencrypt/examples fluxencrypt/benches \
+    fluxencrypt-cli/src fluxencrypt-async/src
 
 # Copy actual source code
 COPY . .
@@ -47,6 +50,8 @@ RUN touch fluxencrypt/src/lib.rs fluxencrypt-cli/src/main.rs fluxencrypt-async/s
 FROM debian:bookworm-slim
 
 # Install runtime dependencies from the Bookworm repositories
+# Track security updates from Bookworm; release artifacts pin the built image digest.
+# hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libssl3 \

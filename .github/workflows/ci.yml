@@ -195,4 +195,4 @@ jobs:
         tool: 'cargo'
         output-file-path: benchmark_output.txt
         github-token: ${{ secrets.GITHUB_TOKEN }}
-        auto-push: true
+        auto-push: ${{ github.event_name != 'pull_request' }}
