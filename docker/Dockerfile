@@ -2,13 +2,12 @@
 # Multi-stage build for optimized production image
 
 # Build stage
-FROM rust:1.95.0-bookworm as builder
+FROM rust:1.95.0-bookworm AS builder
 
-# Install build dependencies with pinned versions and security best practices
-USER root
+# Install build dependencies from the Bookworm repositories
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    pkg-config=1.8.1-1 \
-    libssl-dev=3.0.20-1~deb12u1 \
+    pkg-config \
+    libssl-dev \
     curl \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
@@ -41,16 +40,16 @@ RUN rm -rf fluxencrypt/src fluxencrypt-cli/src fluxencrypt-async/src
 COPY . .
 
 # Build the application
-RUN cargo build --release --bin fluxencrypt-cli
+RUN touch fluxencrypt/src/lib.rs fluxencrypt-cli/src/main.rs fluxencrypt-async/src/lib.rs && \
+    cargo build --release --bin fluxencrypt-cli
 
 # Runtime stage
 FROM debian:bookworm-slim
 
-# Install runtime dependencies with pinned versions and security best practices
-USER root
+# Install runtime dependencies from the Bookworm repositories
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates=20230311+deb12u1 \
-    libssl3=3.0.20-1~deb12u1 \
+    ca-certificates \
+    libssl3 \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean \
     && useradd -r -s /bin/false fluxencrypt

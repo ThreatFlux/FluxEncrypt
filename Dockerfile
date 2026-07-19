@@ -3,7 +3,6 @@
 FROM rust:1.95.0-slim AS builder
 
 # Install required dependencies (versions managed by base image)
-USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkgconf \
     libssl-dev \
