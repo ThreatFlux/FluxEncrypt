@@ -1,6 +1,6 @@
 # Multi-stage build for FluxEncrypt
 # Stage 1: Build the application
-FROM rust:1.95.0-slim AS builder
+FROM rust:1.95.0-slim-trixie AS builder
 
 # Install required dependencies (versions managed by base image)
 # Track security updates from the pinned Debian release; release artifacts pin the built image digest.
