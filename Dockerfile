@@ -1,11 +1,14 @@
 # Multi-stage build for FluxEncrypt
 # Stage 1: Build the application
-FROM rust:1.89-slim AS builder
+FROM rust:1.95.0-slim-trixie AS builder
 
 # Install required dependencies (versions managed by base image)
+# Track security updates from the pinned Debian release; release artifacts pin the built image digest.
+# hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkgconf \
     libssl-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -49,6 +52,8 @@ RUN touch fluxencrypt/src/lib.rs fluxencrypt-cli/src/main.rs fluxencrypt-async/s
 FROM debian:trixie-slim
 
 # Install runtime dependencies (versions managed by base image)
+# Track security updates from the pinned Debian release; release artifacts pin the built image digest.
+# hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libssl3t64 \
@@ -77,3 +82,6 @@ LABEL maintainer="ThreatFlux"
 # Default command
 ENTRYPOINT ["/usr/local/bin/fluxencrypt"]
 CMD ["--help"]
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD /usr/local/bin/fluxencrypt --version || exit 1
