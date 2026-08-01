@@ -2,7 +2,7 @@
 # Minimal image based on Alpine Linux for smaller footprint
 
 # Build stage
-FROM rust:1.95.0-alpine3.23 AS builder
+FROM rust:1.97.1-alpine3.23 AS builder
 
 # Install build dependencies
 # Track security updates from Alpine 3.23; release artifacts pin the built image digest.

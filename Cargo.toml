@@ -16,7 +16,7 @@ homepage = "https://github.com/ThreatFlux/fluxencrypt"
 documentation = "https://docs.rs/fluxencrypt"
 keywords = ["encryption", "cryptography", "security", "aes", "rsa"]
 categories = ["cryptography", "command-line-utilities"]
-rust-version = "1.95.0"
+rust-version = "1.97.1"
 
 [workspace.dependencies]
 # Core cryptography
@@ -26,30 +26,30 @@ pkcs8 = { version = "0.10", features = ["pkcs5", "encryption", "pem"] }
 sha2 = "0.10"
 num-bigint = "0.4"
 num-traits = "0.2"
-zeroize = { version = "1.8", features = ["derive"] }
+zeroize = { version = "1.9", features = ["derive"] }
 
 # Encoding and serialization
-base64 = "0.22"
+base64 = "0.23.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 # Error handling
-thiserror = "2.0"
-anyhow = "1.0"
+thiserror = "2.0.19"
+anyhow = "1.0.104"
 
 # Performance and concurrency
 rayon = "1.11"
-tokio = { version = "1.50", features = ["full"] }
+tokio = { version = "1.53.1", features = ["full"] }
 futures = "0.3"
 
 # CLI utilities
-clap = { version = "4.6", features = ["derive", "cargo"] }
-indicatif = "0.18"
+clap = { version = "4.6.5", features = ["derive", "cargo"] }
+indicatif = "0.18.6"
 colored = "3.1"
 dialoguer = "0.12"
 
 # Logging
-env_logger = "0.11"
+env_logger = "0.11.11"
 log = "0.4"
 
 # Testing

@@ -2,7 +2,7 @@
 # Multi-stage build for optimized production image
 
 # Build stage
-FROM rust:1.95.0-bookworm AS builder
+FROM rust:1.97.1-bookworm AS builder
 
 # Install build dependencies from the Bookworm repositories
 # Track security updates from Bookworm; release artifacts pin the built image digest.
