@@ -93,7 +93,7 @@ impl HybridCipher {
     ///
     /// # Arguments
     /// * `private_key` - The RSA private key to decrypt the AES key with
-    /// * `ciphertext` - The encrypted data in format: [encrypted_session_key(key_size)][nonce(12)][ciphertext+tag]
+    /// * `ciphertext` - The encrypted data in format: `encrypted_session_key(key_size)` + `nonce(12)` + `ciphertext+tag`
     ///
     /// # Returns
     /// The decrypted data as a byte vector.
