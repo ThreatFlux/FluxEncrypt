@@ -1,740 +1,114 @@
 name: Auto Release
 
+concurrency:
+  group: auto-release-${{ github.event.workflow_run.head_branch || github.ref_name || 'main' }}
+  cancel-in-progress: true
+
 on:
-  push:
-    branches: [ main ]
+  workflow_run:
+    workflows: ["CI", "Security Audit"]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       version_bump:
-        description: 'Version bump type'
+        description: Version bump type
         required: true
-        default: 'patch'
+        default: auto
         type: choice
         options:
-        - patch
-        - minor
-        - major
-        - prerelease
-        - prepatch
-        - preminor
-        - premajor
-      prerelease_identifier:
-        description: 'Prerelease identifier (alpha, beta, rc)'
-        required: false
-        default: 'alpha'
-        type: string
+          - auto
+          - patch
+          - minor
+          - major
 
-env:
-  CARGO_TERM_COLOR: always
-  RUST_BACKTRACE: 1
-  REGISTRY: ghcr.io
+permissions:
+  contents: read
 
 jobs:
-  # Wait for CI to complete successfully
-  wait-for-ci:
-    name: Wait for CI
+  check:
+    name: Check for Release
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
-    steps:
-    - name: Wait for Test Suite checks
-      uses: lewagon/wait-on-check-action@v1.3.4
-      with:
-        ref: ${{ github.sha }}
-        check-regexp: '^Test Suite \(.*\)$'
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
-        wait-interval: 30
-        allowed-conclusions: success
-
-    - name: Wait for Security Audit
-      uses: lewagon/wait-on-check-action@v1.3.4
-      with:
-        ref: ${{ github.sha }}
-        check-name: 'security_audit'
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
-        wait-interval: 30
-        allowed-conclusions: success,neutral,skipped
-      continue-on-error: true
-
-  # Determine version and create release
-  version_and_release:
-    name: Version Bump and Release
-    needs: [wait-for-ci]
-    if: always() && (needs.wait-for-ci.result == 'success' || needs.wait-for-ci.result == 'skipped' || github.event_name == 'workflow_dispatch')
-    runs-on: ubuntu-latest
+    if: >-
+      (github.event_name == 'workflow_run' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository) ||
+      github.event_name == 'workflow_dispatch'
+    permissions:
+      actions: read
+      contents: read
     outputs:
-      version: ${{ steps.version.outputs.version }}
-      changelog: ${{ steps.changelog.outputs.changelog }}
+      should_release: ${{ steps.decide.outputs.should_release }}
+      target_sha: ${{ steps.target.outputs.sha }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref_name }}
+
+      - name: Determine target SHA
+        id: target
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if [[ "${EVENT_NAME}" == "workflow_run" ]]; then
+            if [[ ! "${WORKFLOW_RUN_HEAD_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "Invalid workflow-run head SHA" >&2
+              exit 1
+            fi
+            echo "sha=${WORKFLOW_RUN_HEAD_SHA}" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check CI status
+        id: ci_status
+        run: |
+          TARGET_SHA="${{ steps.target.outputs.sha }}"
+          CI_STATUS=$(gh run list --workflow=ci.yml --branch=main --commit="$TARGET_SHA" --event=push --limit=1 --json conclusion --jq '.[0].conclusion // ""')
+          SECURITY_STATUS=$(gh run list --workflow=security.yml --branch=main --commit="$TARGET_SHA" --event=push --limit=1 --json conclusion --jq '.[0].conclusion // ""')
+          if [[ "$CI_STATUS" == "success" ]] && [[ "$SECURITY_STATUS" == "success" ]]; then
+            echo "all_passed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "all_passed=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Decide whether to attempt a release
+        id: decide
+        env:
+          ALL_PASSED: ${{ steps.ci_status.outputs.all_passed }}
+        run: |
+          # The release action itself no-ops when no conventional commit
+          # warrants a release, so this gate only enforces green required runs.
+          if [[ "${ALL_PASSED}" == "true" ]]; then
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  release:
+    name: Create Release
+    needs: check
+    if: needs.check.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ needs.check.outputs.target_sha }}
+
+      - name: Release
+        id: release
+        uses: ThreatFlux/github_actions/release@16d779cd569c34743eb6683ca4c0ce105e9ad234 # v0.4.2
+        with:
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install cargo-workspaces
-        run: |
-          cargo install cargo-workspaces
-
-      - name: Configure git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Check if release needed
-        id: should_release
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "should_release=true" >> $GITHUB_OUTPUT
-          else
-            # Check if latest commit is a release commit
-            if git log --format="%s" -n 1 | grep -E "^chore.*bump version|^chore.*release|^Release v" > /dev/null; then
-              echo "Skipping - last commit was a release"
-              echo "should_release=false" >> $GITHUB_OUTPUT
-            # Check if we're already at a released version (tag exists)
-            elif git describe --exact-match --tags HEAD 2>/dev/null; then
-              echo "Skipping - current commit is already tagged"
-              echo "should_release=false" >> $GITHUB_OUTPUT
-            # Check for releasable commits since last tag
-            else
-              LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-              if [ -z "$LAST_TAG" ]; then
-                # No tags yet, check all commits
-                if git log --format="%s" | grep -E "^(feat|fix|perf|refactor|build|ci|docs|style|test|chore)(\(.+\))?!?:" > /dev/null; then
-                  echo "Found releasable commits (no previous tags)"
-                  echo "should_release=true" >> $GITHUB_OUTPUT
-                else
-                  echo "No releasable commits found"
-                  echo "should_release=false" >> $GITHUB_OUTPUT
-                fi
-              else
-                # Check commits since last tag
-                if git log --format="%s" "${LAST_TAG}..HEAD" | grep -E "^(feat|fix|perf|refactor|build|ci|docs|style|test|chore)(\(.+\))?!?:" > /dev/null; then
-                  echo "Found releasable commits since $LAST_TAG"
-                  echo "should_release=true" >> $GITHUB_OUTPUT
-                else
-                  echo "No releasable commits since $LAST_TAG"
-                  echo "should_release=false" >> $GITHUB_OUTPUT
-                fi
-              fi
-            fi
-          fi
-
-      - name: Exit if no release needed
-        if: steps.should_release.outputs.should_release != 'true'
-        run: |
-          echo "No release needed - exiting workflow"
-          exit 0
-
-      - name: Determine version bump
-        id: version_type
-        if: steps.should_release.outputs.should_release == 'true'
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "bump_type=${{ inputs.version_bump }}" >> $GITHUB_OUTPUT
-            echo "prerelease_id=${{ inputs.prerelease_identifier }}" >> $GITHUB_OUTPUT
-          else
-            # Auto-determine from commits
-            if git log --format="%s" HEAD~5..HEAD | grep -E "^(feat!|fix!|BREAKING CHANGE)" > /dev/null; then
-              echo "bump_type=major" >> $GITHUB_OUTPUT
-            elif git log --format="%s" HEAD~5..HEAD | grep -E "^feat" > /dev/null; then
-              echo "bump_type=minor" >> $GITHUB_OUTPUT
-            elif git log --format="%s" HEAD~5..HEAD | grep -E "^fix" > /dev/null; then
-              echo "bump_type=patch" >> $GITHUB_OUTPUT
-            else
-              echo "bump_type=patch" >> $GITHUB_OUTPUT
-            fi
-          fi
-
-      - name: Get current version
-        id: current_version
-        run: |
-          CURRENT_VERSION=$(grep "^version" Cargo.toml | head -1 | cut -d'"' -f2)
-          echo "current=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          echo "Current version: $CURRENT_VERSION"
-
-      - name: Bump version
-        id: version
-        run: |
-          BUMP_TYPE="${{ steps.version_type.outputs.bump_type }}"
-          CURRENT_VERSION="${{ steps.current_version.outputs.current }}"
-          
-          # Calculate new version manually since cargo bump doesn't support workspaces
-          IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
-          
-          case "$BUMP_TYPE" in
-            major)
-              NEW_VERSION="$((major + 1)).0.0"
-              ;;
-            minor)
-              NEW_VERSION="${major}.$((minor + 1)).0"
-              ;;
-            patch)
-              NEW_VERSION="${major}.${minor}.$((patch + 1))"
-              ;;
-            *)
-              echo "Unknown bump type: $BUMP_TYPE"
-              exit 1
-              ;;
-          esac
-          
-          echo "Bumping from $CURRENT_VERSION to $NEW_VERSION (type: $BUMP_TYPE)"
-          
-          # Update version in workspace root
-          sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" Cargo.toml
-          
-          # Update all workspace members to the same version
-          for dir in fluxencrypt fluxencrypt-cli fluxencrypt-async; do
-            if [ -d "$dir" ]; then
-              echo "Updating $dir to version $NEW_VERSION"
-              sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" "$dir/Cargo.toml"
-              # Update internal dependencies
-              sed -i "s/fluxencrypt = { version = \"[^\"]*\"/fluxencrypt = { version = \"$NEW_VERSION\"/" "$dir/Cargo.toml"
-              sed -i "s/fluxencrypt-async = { version = \"[^\"]*\"/fluxencrypt-async = { version = \"$NEW_VERSION\"/" "$dir/Cargo.toml"
-            fi
-          done
-          
-          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
-
-      - name: Generate changelog
-        id: changelog
-        run: |
-          if [ -f CHANGELOG.md ]; then
-            # Extract the latest version's changelog
-            VERSION="${{ steps.version.outputs.version }}"
-            sed -n "/^## \[$VERSION\]/,/^## \[/p" CHANGELOG.md | sed '$d' > RELEASE_NOTES.md
-          else
-            echo "## What's Changed" > RELEASE_NOTES.md
-            git log --pretty=format:"- %s" HEAD~10..HEAD >> RELEASE_NOTES.md
-          fi
-          
-          # Set multiline output
-          echo "changelog<<EOF" >> $GITHUB_OUTPUT
-          cat RELEASE_NOTES.md >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Check for changes and commit
-        id: commit
-        run: |
-          git add .
-          if git diff --staged --quiet; then
-            echo "No changes to commit - version already at ${{ steps.version.outputs.version }}"
-            echo "changes=false" >> $GITHUB_OUTPUT
-          else
-            git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
-            git push origin main
-            echo "changes=true" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create and push tag
-        id: tag
-        run: |
-          TAG="v${{ steps.version.outputs.version }}"
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists"
-            echo "tag_exists=true" >> $GITHUB_OUTPUT
-          else
-            git tag -a "$TAG" -m "Release $TAG"
-            git push origin "$TAG"
-            echo "tag_exists=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create GitHub Release
-        if: steps.tag.outputs.tag_exists != 'true'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          if [[ "$VERSION" == *"alpha"* ]] || [[ "$VERSION" == *"beta"* ]] || [[ "$VERSION" == *"rc"* ]]; then
-            PRERELEASE="--prerelease"
-          else
-            PRERELEASE=""
-          fi
-          
-          gh release create "v$VERSION" \
-            --title "FluxEncrypt v$VERSION" \
-            --notes-file RELEASE_NOTES.md \
-            $PRERELEASE
-
-  # Build binaries for multiple platforms
-  build_binaries:
-    name: Build Binaries
-    needs: version_and_release
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            artifact_name: fluxencrypt-cli
-            asset_name: fluxencrypt-linux-amd64
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-            artifact_name: fluxencrypt-cli
-            asset_name: fluxencrypt-linux-musl-amd64
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            artifact_name: fluxencrypt-cli
-            asset_name: fluxencrypt-linux-arm64
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            artifact_name: fluxencrypt-cli.exe
-            asset_name: fluxencrypt-windows-amd64.exe
-          - os: windows-latest
-            target: aarch64-pc-windows-msvc
-            artifact_name: fluxencrypt-cli.exe
-            asset_name: fluxencrypt-windows-arm64.exe
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            artifact_name: fluxencrypt-cli
-            asset_name: fluxencrypt-macos-amd64
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            artifact_name: fluxencrypt-cli
-            asset_name: fluxencrypt-macos-arm64
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: "v${{ needs.version_and_release.outputs.version }}"
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-
-      - name: Install musl tools (Linux musl only)
-        if: matrix.target == 'x86_64-unknown-linux-musl'
-        run: sudo apt-get install -y musl-tools
-
-      - name: Install cross for ARM builds
-        if: contains(matrix.target, 'aarch64') && matrix.os == 'ubuntu-latest'
-        run: cargo install cross --version 0.2.5 --locked
-
-      - name: Cache dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Build release binary (Unix)
-        if: matrix.os != 'windows-latest'
-        run: |
-          if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
-            cross build --release --target ${{ matrix.target }} -p fluxencrypt-cli
-          else
-            cargo build --release --target ${{ matrix.target }} -p fluxencrypt-cli
-          fi
-
-      - name: Build release binary (Windows)
-        if: matrix.os == 'windows-latest'
-        run: cargo build --release --target ${{ matrix.target }} -p fluxencrypt-cli
-
-      - name: Strip binary (Unix only)
-        if: matrix.os != 'windows-latest' && !contains(matrix.target, 'aarch64')
-        run: |
-          if command -v strip > /dev/null; then
-            strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
-          fi
-
-      - name: Create release archive (Unix)
-        if: matrix.os != 'windows-latest'
-        run: |
-          cd target/${{ matrix.target }}/release
-          tar czf ${{ matrix.asset_name }}.tar.gz ${{ matrix.artifact_name }}
-          echo "ASSET_PATH=target/${{ matrix.target }}/release/${{ matrix.asset_name }}.tar.gz" >> $GITHUB_ENV
-
-      - name: Create release archive (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          cd target/${{ matrix.target }}/release
-          7z a ${{ matrix.asset_name }}.zip ${{ matrix.artifact_name }}
-          echo "ASSET_PATH=target/${{ matrix.target }}/release/${{ matrix.asset_name }}.zip" >> $env:GITHUB_ENV
-
-      - name: Upload Release Asset (Unix)
-        if: matrix.os != 'windows-latest'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Delete existing asset if it exists (for re-runs)
-          gh release delete-asset "v${{ needs.version_and_release.outputs.version }}" \
-            "$(basename "${{ env.ASSET_PATH }}")" --yes 2>/dev/null || true
-          
-          # Upload the asset
-          gh release upload "v${{ needs.version_and_release.outputs.version }}" \
-            "${{ env.ASSET_PATH }}" --clobber
-
-      - name: Upload Release Asset (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Get the asset filename
-          $assetName = Split-Path -Leaf $env:ASSET_PATH
-          
-          # Try to delete existing asset (ignore errors)
-          try {
-            gh release delete-asset "v${{ needs.version_and_release.outputs.version }}" $assetName --yes 2>$null
-          } catch {
-            Write-Host "No existing asset to delete"
-          }
-          
-          # Upload the asset
-          gh release upload "v${{ needs.version_and_release.outputs.version }}" $env:ASSET_PATH --clobber
-
-      - name: Generate SBOM (Unix)
-        if: matrix.os != 'windows-latest'
-        continue-on-error: true
-        shell: bash
-        run: |
-          SYFT_VERSION="v1.20.0"
-
-          # Install syft if not available
-          if ! command -v syft >/dev/null 2>&1; then
-            echo "Installing syft..."
-            case "${{ matrix.os }}" in
-              macos-latest)
-                OS="darwin"
-                ARCH="amd64"
-                INSTALL_DIR="$HOME/.local/bin"
-                mkdir -p "$INSTALL_DIR"
-                ;;
-              *)
-                OS="linux"
-                ARCH="amd64"
-                INSTALL_DIR="/usr/local/bin"
-                ;;
-            esac
-
-            TARBALL="syft_${SYFT_VERSION#v}_${OS}_${ARCH}.tar.gz"
-            curl -sSfL "https://github.com/anchore/syft/releases/download/${SYFT_VERSION}/${TARBALL}" -o "$TARBALL"
-            curl -sSfL "https://github.com/anchore/syft/releases/download/${SYFT_VERSION}/checksums.txt" -o checksums.txt
-
-            EXPECTED_SHA="$(awk -v file="$TARBALL" '$2 == file { print $1 }' checksums.txt)"
-            if [[ -z "$EXPECTED_SHA" ]]; then
-              echo "Failed to find checksum for $TARBALL"
-              exit 1
-            fi
-
-            if command -v sha256sum >/dev/null 2>&1; then
-              ACTUAL_SHA="$(sha256sum "$TARBALL" | awk '{print $1}')"
-            else
-              ACTUAL_SHA="$(shasum -a 256 "$TARBALL" | awk '{print $1}')"
-            fi
-
-            if [[ "$EXPECTED_SHA" != "$ACTUAL_SHA" ]]; then
-              echo "Syft checksum verification failed"
-              exit 1
-            fi
-
-            tar -xzf "$TARBALL" syft
-            install -m 0755 syft "$INSTALL_DIR/syft"
-            export PATH="$INSTALL_DIR:$PATH"
-          fi
-          
-          # Generate SBOM using syft directly
-          BINARY_PATH="target/${{ matrix.target }}/release/${{ matrix.artifact_name }}"
-          if [[ -f "$BINARY_PATH" ]]; then
-            echo "Generating SBOM for $BINARY_PATH"
-            syft "$BINARY_PATH" \
-              -o spdx-json \
-              --file "${{ matrix.asset_name }}.spdx.json" || echo "SBOM generation failed but continuing"
-          else
-            echo "Binary not found at: $BINARY_PATH"
-            ls -la "target/${{ matrix.target }}/release/" || true
-          fi
-
-      - name: Generate SBOM (Windows)
-        if: matrix.os == 'windows-latest'
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          # Skip SBOM generation on Windows for now
-          Write-Host "SBOM generation skipped on Windows"
-
-      - name: Upload SBOM (Unix)
-        if: matrix.os != 'windows-latest' && hashFiles('*.spdx.json') != ''
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if [[ -f "${{ matrix.asset_name }}.spdx.json" ]]; then
-            echo "Uploading SBOM: ${{ matrix.asset_name }}.spdx.json"
-            # Delete existing SBOM if it exists
-            gh release delete-asset "v${{ needs.version_and_release.outputs.version }}" \
-              "${{ matrix.asset_name }}.spdx.json" --yes 2>/dev/null || true
-            # Upload the SBOM
-            gh release upload "v${{ needs.version_and_release.outputs.version }}" \
-              "${{ matrix.asset_name }}.spdx.json" --clobber || true
-          fi
-
-      - name: Upload SBOM (Windows)
-        if: matrix.os == 'windows-latest' && hashFiles('*.spdx.json') != ''
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if (Test-Path "${{ matrix.asset_name }}.spdx.json") {
-            Write-Host "Uploading SBOM: ${{ matrix.asset_name }}.spdx.json"
-            # Delete existing SBOM if it exists
-            gh release delete-asset "v${{ needs.version_and_release.outputs.version }}" `
-              "${{ matrix.asset_name }}.spdx.json" --yes 2>$null
-            # Upload the SBOM
-            gh release upload "v${{ needs.version_and_release.outputs.version }}" `
-              "${{ matrix.asset_name }}.spdx.json" --clobber
-          }
-
-  # Publish to crates.io
-  publish_crates:
-    name: Publish to crates.io
-    needs: [version_and_release, build_binaries]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: "v${{ needs.version_and_release.outputs.version }}"
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Configure git
-        run: |
-          # Configure git
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions"
-          
-      - name: Publish to crates.io
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: |
-          # Publish packages in dependency order
-          # First publish the core library
-          echo "Publishing fluxencrypt..."
-          cd fluxencrypt
-          cargo publish --token $CARGO_REGISTRY_TOKEN --allow-dirty --no-verify || echo "fluxencrypt may already be published"
-          cd ..
-          
-          # Wait a bit for crates.io to update
-          sleep 10
-          
-          # Then publish packages that depend on fluxencrypt
-          echo "Publishing fluxencrypt-async..."
-          cd fluxencrypt-async
-          cargo publish --token $CARGO_REGISTRY_TOKEN --allow-dirty --no-verify || echo "fluxencrypt-async may already be published"
-          cd ..
-          
-          sleep 10
-          
-          echo "Publishing fluxencrypt-cli..."
-          cd fluxencrypt-cli
-          cargo publish --token $CARGO_REGISTRY_TOKEN --allow-dirty --no-verify || echo "fluxencrypt-cli may already be published"
-          cd ..
-          
-          echo "All packages published or already up-to-date"
-
-  # Build and publish Docker images
-  docker_build:
-    name: Build and Push Docker Images
-    needs: [version_and_release, build_binaries]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: "v${{ needs.version_and_release.outputs.version }}"
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Check for DockerHub credentials
-        id: check-dockerhub
-        run: |
-          if [[ -n "${{ secrets.DOCKERHUB_USERNAME }}" && -n "${{ secrets.DOCKERHUB_TOKEN }}" ]]; then
-            echo "has-dockerhub=true" >> $GITHUB_OUTPUT
-          else
-            echo "has-dockerhub=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Log in to Docker Hub
-        if: steps.check-dockerhub.outputs.has-dockerhub == 'true'
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            threatflux/fluxencrypt
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}},value=v${{ needs.version_and_release.outputs.version }}
-            type=semver,pattern={{major}}.{{minor}},value=v${{ needs.version_and_release.outputs.version }}
-            type=semver,pattern={{major}},value=v${{ needs.version_and_release.outputs.version }}
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            VERSION=${{ needs.version_and_release.outputs.version }}
-
-      - name: Generate SBOM for Docker image
-        continue-on-error: true
-        id: docker_sbom
-        uses: anchore/sbom-action@v0.17.7
-        with:
-          image: threatflux/fluxencrypt:${{ needs.version_and_release.outputs.version }}
-          format: spdx-json
-          output-file: "fluxencrypt-docker.spdx.json"
-
-      - name: Generate SBOM fallback
-        if: steps.docker_sbom.outcome == 'failure'
-        continue-on-error: true
-        run: |
-          SYFT_VERSION="v1.20.0"
-
-          # Try syft directly as fallback
-          if ! command -v syft >/dev/null 2>&1; then
-            TARBALL="syft_${SYFT_VERSION#v}_linux_amd64.tar.gz"
-            curl -sSfL "https://github.com/anchore/syft/releases/download/${SYFT_VERSION}/${TARBALL}" -o "$TARBALL"
-            curl -sSfL "https://github.com/anchore/syft/releases/download/${SYFT_VERSION}/checksums.txt" -o checksums.txt
-
-            EXPECTED_SHA="$(awk -v file="$TARBALL" '$2 == file { print $1 }' checksums.txt)"
-            ACTUAL_SHA="$(sha256sum "$TARBALL" | awk '{print $1}')"
-            if [[ -z "$EXPECTED_SHA" || "$EXPECTED_SHA" != "$ACTUAL_SHA" ]]; then
-              echo "Syft checksum verification failed"
-              exit 1
-            fi
-
-            tar -xzf "$TARBALL" syft
-            install -m 0755 syft /usr/local/bin/syft
-          fi
-          syft threatflux/fluxencrypt:${{ needs.version_and_release.outputs.version }} \
-            -o spdx-json \
-            --file fluxencrypt-docker.spdx.json || echo "Docker SBOM generation failed"
-
-      - name: Upload Docker SBOM
-        if: hashFiles('fluxencrypt-docker.spdx.json') != ''
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if [ -f "fluxencrypt-docker.spdx.json" ]; then
-            # Delete existing Docker SBOM if it exists
-            gh release delete-asset "v${{ needs.version_and_release.outputs.version }}" \
-              "fluxencrypt-docker.spdx.json" --yes 2>/dev/null || true
-            # Upload the Docker SBOM
-            gh release upload "v${{ needs.version_and_release.outputs.version }}" \
-              "fluxencrypt-docker.spdx.json" --clobber || true
-          fi
-
-  # Security scanning
-  security_scan:
-    name: Security Scan
-    needs: [version_and_release, docker_build]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
-        with:
-          image-ref: 'threatflux/fluxencrypt:${{ needs.version_and_release.outputs.version }}'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-
-      - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: 'trivy-results.sarif'
-
-      - name: Upload security scan results
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Delete existing scan results if they exist
-          gh release delete-asset "v${{ needs.version_and_release.outputs.version }}" \
-            "trivy-results.sarif" --yes 2>/dev/null || true
-          # Upload the scan results
-          gh release upload "v${{ needs.version_and_release.outputs.version }}" \
-            "trivy-results.sarif" --clobber || true
-
-  # Update documentation
-  update_docs:
-    name: Update Documentation
-    needs: [version_and_release, publish_crates]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: "v${{ needs.version_and_release.outputs.version }}"
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Generate documentation
-        run: |
-          cargo doc --all-features --workspace --no-deps
-
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./target/doc
-          destination_dir: docs/v${{ needs.version_and_release.outputs.version }}
-
-  # Final notifications
-  notify:
-    name: Notify Release Complete
-    needs: [version_and_release, build_binaries, publish_crates, docker_build, security_scan, update_docs]
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - name: Notify success
-        if: needs.version_and_release.result == 'success' && needs.build_binaries.result == 'success' && needs.publish_crates.result == 'success'
-        run: |
-          echo "🎉 FluxEncrypt v${{ needs.version_and_release.outputs.version }} has been successfully released!"
-          echo "📦 Crates published to crates.io"
-          echo "🐳 Docker images pushed to Docker Hub"
-          echo "📋 Release artifacts uploaded to GitHub"
-          echo "🔒 Security scan completed"
-          echo "📚 Documentation updated"
-
-      - name: Notify failure
-        if: failure()
-        run: |
-          echo "❌ Release process failed for FluxEncrypt v${{ needs.version_and_release.outputs.version }}"
-          echo "Please check the workflow logs for details."
+          bump: ${{ github.event.inputs.version_bump || 'auto' }}
