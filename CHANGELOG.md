@@ -11,9 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated the supported Rust toolchain and MSRV to 1.97.1.
 - Refreshed Rust dependencies and the locked dependency graph.
 - Updated Docker builder images to Rust 1.97.1.
-- Bumped every declared dependency to its latest stable release and pinned each
-  declaration to the exact latest version so the declared floor matches the
-  lockfile.
+- Bumped every declared dependency to its latest stable release, raising each
+  requirement's minimum to that version so the declared floor matches the
+  lockfile. Requirements stay caret ranges, so patch and minor updates continue
+  to resolve normally; `Cargo.lock` remains the source of exact versions.
 - Documented why `pkcs8`, `sha2` and `rand` stay on 0.10/0.10/0.8: `rsa` 0.9.x is
   the latest stable release line (0.10 is still a release candidate) and its
   public API is built on `pkcs8` 0.10, `digest` 0.10 and `rand_core` 0.6.
