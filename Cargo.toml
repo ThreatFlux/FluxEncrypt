@@ -41,7 +41,7 @@ anyhow = "1.0.104"
 # Performance and concurrency
 rayon = "1.12.0"
 tokio = { version = "1.53.1", features = ["full"] }
-futures = "0.3.33"
+futures = "0.3.34"
 
 # CLI utilities
 clap = { version = "4.6.6", features = ["derive", "cargo"] }

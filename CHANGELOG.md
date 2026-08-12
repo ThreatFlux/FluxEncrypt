@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documented why `pkcs8`, `sha2` and `rand` stay on 0.10/0.10/0.8: `rsa` 0.9.x is
   the latest stable release line (0.10 is still a release candidate) and its
   public API is built on `pkcs8` 0.10, `digest` 0.10 and `rand_core` 0.6.
+- Refreshed the lockfile again to the latest stable releases and raised the
+  `futures` requirement to 0.3.34. Everything else was already at its latest
+  stable version; `generic-array` stays on 0.14.7 because `crypto-common` 0.1.7
+  pins it exactly.
 
 ### Removed
 - Dropped the unused `num-bigint` and `num-traits` dependencies; neither was
