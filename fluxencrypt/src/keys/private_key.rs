@@ -223,11 +223,31 @@ mod tests {
             let expected_modulus_len = key_size / 8;
             let expected_prime_len = key_size / 16;
 
+            // These accessors return the minimal big-endian encoding, so only
+            // values whose high bit is guaranteed set have a fixed width. Key
+            // generation forces that bit on the modulus and both primes, so
+            // they are always exactly this wide.
             assert_eq!(private_key.modulus().len(), expected_modulus_len);
-            assert_eq!(private_key.private_exponent().len(), expected_modulus_len);
             assert_eq!(private_key.prime1().len(), expected_prime_len);
             assert_eq!(private_key.prime2().len(), expected_prime_len);
-            assert_eq!(private_key.crt_coefficient().len(), expected_prime_len);
+
+            // The private exponent and CRT coefficient are reduced values with
+            // no such guarantee, so roughly 1 key in 256 encodes at least one
+            // byte shorter. Bound them instead of pinning an exact width; the
+            // lower bound only rules out losing 8 whole bytes (odds ~2^-64).
+            let d_len = private_key.private_exponent().len();
+            assert!(
+                d_len <= expected_modulus_len && d_len > expected_modulus_len - 8,
+                "{key_size}-bit private exponent encoded to {d_len} bytes, \
+                 expected at most {expected_modulus_len}"
+            );
+
+            let crt_len = private_key.crt_coefficient().len();
+            assert!(
+                crt_len <= expected_prime_len && crt_len > expected_prime_len - 8,
+                "{key_size}-bit CRT coefficient encoded to {crt_len} bytes, \
+                 expected at most {expected_prime_len}"
+            );
         }
     }
 
