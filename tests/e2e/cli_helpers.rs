@@ -6,45 +6,15 @@ use tempfile::TempDir;
 
 /// Get the CLI path in a secure way
 pub fn get_cli_path() -> PathBuf {
-    // Use a more secure approach than current_exe
-    let target_dir = std::env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".to_string());
-
-    let profile = if cfg!(debug_assertions) {
-        "debug"
-    } else {
-        "release"
-    };
-
-    let mut path = PathBuf::from(target_dir);
-    path.push(profile);
-    path.push("fluxencrypt-cli");
-
-    // Add .exe extension on Windows
-    if cfg!(target_os = "windows") {
-        path.set_extension("exe");
-    }
-
-    path
+    PathBuf::from(env!("CARGO_BIN_EXE_fluxencrypt-cli"))
 }
 
 /// Run CLI command and return output
 pub fn run_cli(args: &[&str]) -> std::process::Output {
-    let cli_path = get_cli_path();
-    if !cli_path.exists() {
-        build_cli();
-    }
-
-    Command::new(cli_path)
+    Command::new(get_cli_path())
         .args(args)
         .output()
-        .expect("Failed to execute CLI")
-}
-
-/// Build the CLI binary
-fn build_cli() {
-    let _ = Command::new("cargo")
-        .args(["build", "-p", "fluxencrypt-cli", "--bin", "fluxencrypt-cli"])
-        .output();
+        .expect("Failed to execute built CLI")
 }
 
 /// Setup test environment with temporary directory and key files
@@ -63,8 +33,8 @@ impl Default for TestEnvironment {
 impl TestEnvironment {
     pub fn new() -> Self {
         let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
-        let public_key_path = temp_dir.path().join("public.pem");
-        let private_key_path = temp_dir.path().join("private.pem");
+        let public_key_path = temp_dir.path().join("test.pub");
+        let private_key_path = temp_dir.path().join("test.pem");
 
         Self {
             temp_dir,
@@ -77,10 +47,10 @@ impl TestEnvironment {
     pub fn generate_keys(&self) -> std::process::Output {
         run_cli(&[
             "keygen",
-            "--public-key",
-            self.public_key_path.to_str().unwrap(),
-            "--private-key",
-            self.private_key_path.to_str().unwrap(),
+            "--output-dir",
+            self.temp_dir.path().to_str().unwrap(),
+            "--name",
+            "test",
             "--key-size",
             "2048",
         ])

@@ -6,7 +6,6 @@ use std::fs;
 const TEST_CONTENT: &str = "This is a test file for end-to-end CLI testing.\nIt contains multiple lines.\nAnd some special characters: !@#$%^&*()";
 
 #[test]
-#[ignore = "Requires built CLI binary"]
 fn test_encrypt_decrypt_workflow() {
     let env = TestEnvironment::new();
 
@@ -34,8 +33,7 @@ fn test_encrypt_decrypt_workflow() {
 }
 
 #[test]
-#[ignore = "Requires built CLI binary"]
-fn test_encrypt_with_cipher_suites() {
+fn test_encrypt_with_output_encodings() {
     let env = TestEnvironment::new();
 
     // Generate keys once
@@ -46,10 +44,10 @@ fn test_encrypt_with_cipher_suites() {
     fs::write(&input_file, TEST_CONTENT).unwrap();
 
     // Test different cipher suites
-    let cipher_suites = vec!["aes128gcm", "aes256gcm"];
+    let encodings = [false, true];
 
-    for cipher_suite in &cipher_suites {
-        test_cipher_suite(&env, &input_file, cipher_suite);
+    for raw in encodings {
+        test_encoding(&env, &input_file, raw);
     }
 }
 
@@ -69,7 +67,7 @@ fn encrypt_file(
 ) {
     let output = run_cli(&[
         "encrypt",
-        "--public-key",
+        "--key",
         env.public_key_path.to_str().unwrap(),
         "--input",
         input_file.to_str().unwrap(),
@@ -88,7 +86,7 @@ fn decrypt_file(
 ) {
     let output = run_cli(&[
         "decrypt",
-        "--private-key",
+        "--key",
         env.private_key_path.to_str().unwrap(),
         "--input",
         encrypted_file.to_str().unwrap(),
@@ -100,41 +98,39 @@ fn decrypt_file(
     assert!(decrypted_file.exists(), "Decrypted file should be created");
 }
 
-fn test_cipher_suite(env: &TestEnvironment, input_file: &std::path::Path, cipher_suite: &str) {
-    let encrypted_file = env
-        .temp_dir
-        .path()
-        .join(format!("encrypted_{}.enc", cipher_suite));
-    let decrypted_file = env
-        .temp_dir
-        .path()
-        .join(format!("decrypted_{}.txt", cipher_suite));
+fn test_encoding(env: &TestEnvironment, input_file: &std::path::Path, raw: bool) {
+    let encrypted_file = env.temp_dir.path().join(format!("encrypted_{}.enc", raw));
+    let decrypted_file = env.temp_dir.path().join(format!("decrypted_{}.txt", raw));
 
-    // Encrypt
-    let output = run_cli(&[
+    let mut args = vec![
         "encrypt",
-        "--public-key",
+        "--key",
         env.public_key_path.to_str().unwrap(),
         "--input",
         input_file.to_str().unwrap(),
         "--output",
         encrypted_file.to_str().unwrap(),
-        "--cipher-suite",
-        cipher_suite,
-    ]);
-    assert_cli_success(&output, &format!("Encryption with {}", cipher_suite));
+    ];
+    if raw {
+        args.push("--raw");
+    }
+    let output = run_cli(&args);
+    assert_cli_success(&output, "Encryption encoding");
 
-    // Decrypt
-    let output = run_cli(&[
+    let mut args = vec![
         "decrypt",
-        "--private-key",
+        "--key",
         env.private_key_path.to_str().unwrap(),
         "--input",
         encrypted_file.to_str().unwrap(),
         "--output",
         decrypted_file.to_str().unwrap(),
-    ]);
-    assert_cli_success(&output, &format!("Decryption with {}", cipher_suite));
+    ];
+    if raw {
+        args.push("--raw");
+    }
+    let output = run_cli(&args);
+    assert_cli_success(&output, "Decryption encoding");
 
     // Verify
     let decrypted_content = fs::read_to_string(&decrypted_file).unwrap();

@@ -13,71 +13,75 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: read
+
+env:
+  CARGO_BUILD_JOBS: 4
+
 jobs:
   prepare_release:
     name: Prepare Release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
     if: github.ref == 'refs/heads/main'
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         fetch-depth: 0
 
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6
+      uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
+      with:
+        toolchain: 1.99.0
 
     - name: Validate version format
       run: |
-        if ! echo "${{ inputs.version }}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$'; then
-          echo "Invalid version format: ${{ inputs.version }}"
+        if ! echo "$RELEASE_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$'; then
+          echo "Invalid version format: $RELEASE_VERSION"
           exit 1
         fi
 
     - name: Check if version exists
       run: |
-        if git tag | grep -q "^v${{ inputs.version }}$"; then
-          echo "Version v${{ inputs.version }} already exists"
+        if git show-ref --verify --quiet "refs/tags/v$RELEASE_VERSION"; then
+          echo "Version v$RELEASE_VERSION already exists"
           exit 1
         fi
 
     - name: Update Cargo.toml versions
       run: |
-        # Update workspace version
-        sed -i 's/^version = ".*"/version = "${{ inputs.version }}"/' Cargo.toml
-        
-        # Update individual crate versions
-        find . -name "Cargo.toml" -not -path "./target/*" | while read -r file; do
-          sed -i 's/^version = ".*"/version = "${{ inputs.version }}"/' "$file"
-          # Update workspace dependencies
-          sed -i 's/fluxencrypt = { version = ".*"/fluxencrypt = { version = "${{ inputs.version }}"/' "$file"
-          sed -i 's/fluxencrypt-async = { version = ".*"/fluxencrypt-async = { version = "${{ inputs.version }}"/' "$file"
-        done
+        python3 scripts/set-version.py "$RELEASE_VERSION"
+        cargo update --workspace
 
     - name: Update CHANGELOG.md
       run: |
         # Create a new changelog entry
         DATE=$(date +%Y-%m-%d)
-        sed -i "s/## \[Unreleased\]/## [Unreleased]\n\n## [${{ inputs.version }}] - $DATE/" CHANGELOG.md
+        sed -i "s/## \[Unreleased\]/## [Unreleased]\n\n## [$RELEASE_VERSION] - $DATE/" CHANGELOG.md
 
     - name: Run tests
       env:
         PROPTEST_CASES: 8
         PROPTEST_MAX_SHRINK_ITERS: 10
-      run: cargo test --all-features --workspace --release
+      run: cargo test --locked --all-features --workspace --release
 
     - name: Check formatting
       run: cargo fmt --all -- --check
 
     - name: Run clippy
-      run: cargo clippy --all-targets --all-features --workspace -- -D warnings
+      run: cargo clippy --locked --all-targets --all-features --workspace -- -D warnings
 
     - name: Dry run cargo publish
       if: inputs.dry_run
       run: |
         cargo publish --dry-run -p fluxencrypt
-        cargo publish --dry-run -p fluxencrypt-async  
+        cargo publish --dry-run -p fluxencrypt-async
         cargo publish --dry-run -p fluxencrypt-cli
 
     - name: Commit version changes
@@ -86,23 +90,27 @@ jobs:
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
         git add .
-        git commit -m "Release v${{ inputs.version }}"
+        git commit -m "Release v$RELEASE_VERSION"
         git push
 
     - name: Create and push tag
       if: "!inputs.dry_run"
       run: |
-        git tag -a "v${{ inputs.version }}" -m "Release v${{ inputs.version }}"
-        git push origin "v${{ inputs.version }}"
+        git tag -a "v$RELEASE_VERSION" -m "Release v$RELEASE_VERSION"
+        git push origin "v$RELEASE_VERSION"
 
   post_release:
     name: Post Release Tasks
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
     needs: prepare_release
     if: "!inputs.dry_run"
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       with:
         ref: main
         token: ${{ secrets.GITHUB_TOKEN }}
@@ -111,10 +119,10 @@ jobs:
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
-        
+
         # Prepare for next development cycle
         sed -i '/## \[Unreleased\]/a\\n### Added\n- \n\n### Changed\n- \n\n### Fixed\n- ' CHANGELOG.md
-        
+
         git add CHANGELOG.md
-        git commit -m "Prepare for next development cycle after v${{ inputs.version }}"
+        git commit -m "Prepare for next development cycle after v$RELEASE_VERSION"
         git push

@@ -4,7 +4,6 @@ use crate::cli_helpers::*;
 use std::fs;
 
 #[test]
-#[ignore = "Requires built CLI binary"]
 fn test_streaming_with_progress() {
     let env = TestEnvironment::new();
 
@@ -44,9 +43,8 @@ fn stream_encrypt_with_progress(
     encrypted_file: &std::path::Path,
 ) {
     let output = run_cli(&[
-        "stream",
-        "encrypt",
-        "--public-key",
+        "stream-encrypt",
+        "--key",
         env.public_key_path.to_str().unwrap(),
         "--input",
         input_file.to_str().unwrap(),
@@ -54,15 +52,15 @@ fn stream_encrypt_with_progress(
         encrypted_file.to_str().unwrap(),
         "--chunk-size",
         "4096",
-        "--progress",
+        "--verbose",
     ]);
 
     assert_cli_success(&output, "Stream encryption");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("Progress") || stdout.contains("%") || stdout.contains("bytes"),
-        "Should show progress information"
+        stdout.contains("Processing rate:") && stdout.contains("Chunk size:"),
+        "Should report actual stream processing statistics"
     );
 }
 
@@ -72,15 +70,14 @@ fn stream_decrypt_with_progress(
     decrypted_file: &std::path::Path,
 ) {
     let output = run_cli(&[
-        "stream",
-        "decrypt",
-        "--private-key",
+        "stream-decrypt",
+        "--key",
         env.private_key_path.to_str().unwrap(),
         "--input",
         encrypted_file.to_str().unwrap(),
         "--output",
         decrypted_file.to_str().unwrap(),
-        "--progress",
+        "--verbose",
     ]);
 
     assert_cli_success(&output, "Stream decryption");

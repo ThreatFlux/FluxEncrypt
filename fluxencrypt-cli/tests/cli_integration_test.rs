@@ -6,7 +6,7 @@ use std::fs;
 use tempfile::tempdir;
 
 fn get_cli_command() -> Command {
-    Command::cargo_bin("fluxencrypt-cli").unwrap()
+    assert_cmd::cargo::cargo_bin_cmd!("fluxencrypt-cli")
 }
 
 #[test]

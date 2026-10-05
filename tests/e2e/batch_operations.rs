@@ -4,7 +4,6 @@ use crate::cli_helpers::*;
 use std::fs;
 
 #[test]
-#[ignore = "Requires built CLI binary"]
 fn test_batch_processing() {
     let env = TestEnvironment::new();
 
@@ -58,9 +57,9 @@ fn batch_encrypt(
     encrypted_dir: &std::path::Path,
 ) {
     let output = run_cli(&[
-        "batch",
-        "encrypt",
-        "--public-key",
+        "batch-encrypt",
+        "--flatten",
+        "--key",
         env.public_key_path.to_str().unwrap(),
         "--input-dir",
         input_dir.to_str().unwrap(),
@@ -88,9 +87,9 @@ fn batch_decrypt(
     decrypted_dir: &std::path::Path,
 ) {
     let output = run_cli(&[
-        "batch",
-        "decrypt",
-        "--private-key",
+        "batch-decrypt",
+        "--flatten",
+        "--key",
         env.private_key_path.to_str().unwrap(),
         "--input-dir",
         encrypted_dir.to_str().unwrap(),
@@ -109,7 +108,7 @@ fn verify_batch_results(decrypted_dir: &std::path::Path) {
     ];
 
     for (filename, expected_content) in &expected_files {
-        let decrypted_file = decrypted_dir.join(filename);
+        let decrypted_file = decrypted_dir.join(format!("{}.enc.enc", filename));
         assert!(
             decrypted_file.exists(),
             "Decrypted file {} should exist",

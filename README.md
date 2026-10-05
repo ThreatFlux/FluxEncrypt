@@ -45,7 +45,7 @@ A high-performance, secure encryption SDK for Rust applications, providing both 
 
 ### 🛡️ Security
 - **Memory Protection**: Automatic secret zeroization
-- **Constant-time Operations**: Protection against timing attacks
+- **Timing limitations**: RSA private-key operations have the unpatched [RUSTSEC-2023-0071](https://rustsec.org/advisories/RUSTSEC-2023-0071.html) timing advisory; see [modernization notes](https://github.com/ThreatFlux/FluxEncrypt/blob/main/docs/MODERNIZATION.md).
 - **Secure Random Generation**: Cryptographically secure randomness
 - **Environment Integration**: Secure secret management from environment variables
 
@@ -288,8 +288,8 @@ cd fluxencrypt && cargo bench
 - Secure random number generation
 
 ### Side-channel Resistance
-- Constant-time implementations
-- Protection against timing attacks
+- AES-GCM uses the `ring` backend; this does not remove the RSA limitation below.
+- RSA private-key timing risk remains; avoid remotely observable decryption endpoints until upstream supplies a patched stable release.
 - Secure coding practices throughout
 
 ## Project Structure

@@ -14,8 +14,9 @@ db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
 ignore = [
     # RUSTSEC-2023-0071: Marvin Attack - timing sidechannel in RSA crate
-    # No fix available yet, tracked at https://github.com/RustCrypto/RSA/issues/390
-    # This is a known limitation with active work on mitigation
+    # No fix available yet, tracked at https://github.com/RustCrypto/RSA/issues/626
+    # Private-key operations are affected, including remotely measurable timing.
+    # Retain the existing exception; mitigations/limitations: docs/MODERNIZATION.md.
     "RUSTSEC-2023-0071"
 ]
 

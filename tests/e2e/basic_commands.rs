@@ -4,7 +4,6 @@ use crate::cli_helpers::*;
 use std::fs;
 
 #[test]
-#[ignore = "Requires built CLI binary"]
 fn test_cli_help() {
     let output = run_cli(&["--help"]);
     assert_cli_success(&output, "CLI help");
@@ -23,16 +22,14 @@ fn test_cli_help() {
 }
 
 #[test]
-#[ignore = "Requires built CLI binary"]
 fn test_cli_version() {
     let output = run_cli(&["--version"]);
     assert_cli_success(&output, "CLI version");
 
-    assert_output_contains(&output, &["fluxencrypt", "0.1.0"]);
+    assert_output_contains(&output, &["fluxencrypt", env!("CARGO_PKG_VERSION")]);
 }
 
 #[test]
-#[ignore = "Requires built CLI binary"]
 fn test_keygen_command() {
     let env = TestEnvironment::new();
 

@@ -1,91 +1,26 @@
-# FluxEncrypt Alpine Docker Image
-# Minimal image based on Alpine Linux for smaller footprint
-
-# Build stage
-FROM rust:1.97.1-alpine3.23 AS builder
-
-# Install build dependencies
-# Track security updates from Alpine 3.23; release artifacts pin the built image digest.
-# hadolint ignore=DL3018
-RUN apk add --no-cache \
-    musl-dev \
-    pkgconfig \
-    openssl-dev \
-    openssl-libs-static
-
-# Set working directory
-WORKDIR /usr/src/fluxencrypt
-
-# Copy workspace configuration
-COPY Cargo.toml Cargo.lock ./
-COPY fluxencrypt/Cargo.toml ./fluxencrypt/
-COPY fluxencrypt-cli/Cargo.toml ./fluxencrypt-cli/
-COPY fluxencrypt-async/Cargo.toml ./fluxencrypt-async/
-
-# Create dummy source files to cache dependencies
-RUN mkdir -p fluxencrypt/src fluxencrypt/examples fluxencrypt/benches fluxencrypt-cli/src fluxencrypt-async/src \
-    && echo "fn main() {}" > fluxencrypt-cli/src/main.rs \
-    && echo "fn main() {}" > fluxencrypt/src/lib.rs \
-    && echo "fn main() {}" > fluxencrypt/examples/basic_encryption.rs \
-    && echo "fn main() {}" > fluxencrypt/examples/file_encryption.rs \
-    && echo "fn main() {}" > fluxencrypt/examples/key_management.rs \
-    && echo "fn main() {}" > fluxencrypt/examples/environment_config.rs \
-    && echo "fn main() {}" > fluxencrypt/benches/encryption_benchmarks.rs \
-    && echo "fn main() {}" > fluxencrypt-async/src/lib.rs
-
-# Build dependencies with static linking
-ENV RUSTFLAGS="-C target-feature=-crt-static"
-RUN cargo build --release --workspace
-RUN rm -rf fluxencrypt/src fluxencrypt/examples fluxencrypt/benches \
-    fluxencrypt-cli/src fluxencrypt-async/src
-
-# Copy actual source code
+# Stable upstream images are pinned to their multi-platform manifest digests.
+FROM rust:1.99.0-alpine3.24@sha256:0cce0a5e0e8ba67b455257a3a02a1d99005f382748789d6464460028810f1627 AS builder
+# Distribution packages receive security updates during builds.
+RUN apk add --no-cache musl-dev pkgconfig
+WORKDIR /app
 COPY . .
+ARG CARGO_BUILD_JOBS=4
+ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
+ENV RUSTFLAGS="-C target-feature=-crt-static"
+RUN cargo build --locked --release --package fluxencrypt-cli --all-features
 
-# Build the application
-RUN touch fluxencrypt/src/lib.rs fluxencrypt-cli/src/main.rs fluxencrypt-async/src/lib.rs && \
-    cargo build --release --bin fluxencrypt-cli
-
-# Runtime stage
-FROM alpine:3.23
-
-# Install runtime dependencies
-# Track security updates from Alpine 3.23; release artifacts pin the built image digest.
-# hadolint ignore=DL3018
-RUN apk add --no-cache \
-    ca-certificates \
-    libgcc \
-    && adduser -D -s /bin/sh fluxencrypt
-
-# Copy the binary from builder stage
-COPY --from=builder /usr/src/fluxencrypt/target/release/fluxencrypt-cli /usr/local/bin/fluxencrypt-cli
-
-# Set proper permissions
-RUN chmod +x /usr/local/bin/fluxencrypt-cli
-
-# Create data directory
+FROM alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
+RUN apk add --no-cache ca-certificates libgcc && adduser -D fluxencrypt
+COPY --from=builder /app/target/release/fluxencrypt-cli /usr/local/bin/fluxencrypt-cli
 RUN mkdir -p /data && chown fluxencrypt:fluxencrypt /data
-
-# Switch to non-root user
 USER fluxencrypt
-
-# Set working directory
 WORKDIR /data
-
-# Default command
-ENTRYPOINT ["fluxencrypt-cli"]
+ARG VERSION=latest
+LABEL org.opencontainers.image.title="FluxEncrypt" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.source="https://github.com/ThreatFlux/FluxEncrypt" \
+      org.opencontainers.image.licenses="MIT"
+ENTRYPOINT ["/usr/local/bin/fluxencrypt-cli"]
 CMD ["--help"]
-
-# Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD fluxencrypt-cli --version || exit 1
-
-# Labels for metadata
-LABEL org.opencontainers.image.title="FluxEncrypt Alpine"
-LABEL org.opencontainers.image.description="Secure encryption SDK and CLI (Alpine Linux)"
-LABEL org.opencontainers.image.version="0.1.0"
-LABEL org.opencontainers.image.authors="Wyatt Roersma, Claude Code, Codex"
-LABEL org.opencontainers.image.vendor="ThreatFlux Organization"
-LABEL org.opencontainers.image.licenses="MIT"
-LABEL org.opencontainers.image.documentation="https://github.com/ThreatFlux/fluxencrypt"
-LABEL org.opencontainers.image.source="https://github.com/ThreatFlux/fluxencrypt"
+    CMD /usr/local/bin/fluxencrypt-cli --version || exit 1

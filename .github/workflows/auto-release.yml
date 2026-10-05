@@ -17,10 +17,10 @@ on:
         default: auto
         type: choice
         options:
-          - auto
-          - patch
-          - minor
-          - major
+        - auto
+        - patch
+        - minor
+        - major
 
 permissions:
   actions: read
@@ -33,7 +33,7 @@ jobs:
       actions: write
       contents: write
       pull-requests: write
-    uses: ThreatFlux/github_actions/.github/workflows/reusable-auto-release.yml@7a5f08885a77520db023882c8de17d9e6580b7ae # v0.7.5
+    uses: ThreatFlux/github_actions/.github/workflows/reusable-auto-release.yml@7a5f08885a77520db023882c8de17d9e6580b7ae  # v0.7.5
     with:
       bump: ${{ github.event.inputs.version_bump || 'auto' }}
       required-workflows: ci.yml,security.yml

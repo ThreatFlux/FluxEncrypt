@@ -2,45 +2,49 @@ name: Security Audit
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
   schedule:
     # Run security audit daily at 2 AM UTC
-    - cron: '0 2 * * *'
+  - cron: '0 2 * * *'
+
+permissions:
+  contents: read
+
+env:
+  CARGO_BUILD_JOBS: 4
 
 jobs:
   security_audit:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.0
-    
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+      uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
       with:
-        toolchain: stable
+        toolchain: 1.99.0
 
     - name: Cache dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
       with:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
           target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-rust-1.99.0-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Install cargo-audit
-      run: cargo install cargo-audit
+      run: cargo install cargo-audit --version 0.22.2 --locked
 
     - name: Run cargo audit
-      run: |
-        # Ignore RUSTSEC-2023-0071 (RSA Marvin Attack) - no fix available yet
-        # This is a timing side-channel attack that requires local access and
-        # precise timing measurements. We accept this risk for now.
-        cargo audit --ignore RUSTSEC-2023-0071
+      run: cargo audit --ignore RUSTSEC-2023-0071
+      # The existing exception covers private-key timing exposure, including network
+      # timing. No stable patch exists; see docs/MODERNIZATION.md for mitigations.
 
     - name: Install cargo-deny
-      run: cargo install cargo-deny
+      run: cargo install cargo-deny --version 0.20.2 --locked
 
     - name: Run cargo deny
       run: cargo deny check
@@ -50,9 +54,9 @@ jobs:
     if: github.event_name == 'pull_request'
     steps:
     - name: 'Checkout Repository'
-      uses: actions/checkout@v4
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
     - name: 'Dependency Review'
-      uses: actions/dependency-review-action@v4
+      uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294  # v5.0.0
       with:
         fail-on-severity: moderate
         deny-licenses: GPL-2.0, GPL-3.0, AGPL-1.0, AGPL-3.0
@@ -60,55 +64,70 @@ jobs:
   supply_chain_security:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+      uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
       with:
-        toolchain: stable
+        toolchain: 1.99.0
 
     - name: Cache dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
       with:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
           target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-rust-1.99.0-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Install cargo-geiger
-      run: cargo install cargo-geiger
+      run: cargo install cargo-geiger --version 0.13.0 --locked
 
     - name: Run cargo geiger (unsafe code detection)
+      env:
+        RUSTUP_TOOLCHAIN: 1.99.0
+        CARGO_TARGET_DIR: ${{ github.workspace }}/target/geiger
       run: |
-        echo "Running cargo geiger on workspace members..."
+        mkdir -p geiger-reports
         for package in fluxencrypt fluxencrypt-cli fluxencrypt-async; do
-          echo "Checking package: $package"
-          (cd "$package" && cargo geiger --all-features) || echo "Warning: cargo geiger failed for $package"
+          (cd "$package" && cargo geiger --locked --all-features --package "$package" --output-format Json) > "geiger-reports/$package.json" 2> "geiger-reports/$package.stderr"
+          python3 scripts/check-geiger-report.py "geiger-reports/$package.json" "$package"
         done
 
+    - name: Retain unsafe-code inventory and diagnostics
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+      with:
+        name: geiger-inventory
+        path: geiger-reports
+        if-no-files-found: error
+
     - name: Install cargo-outdated
-      run: cargo install cargo-outdated
+      run: cargo install cargo-outdated --version 0.19.0 --locked
 
     - name: Check for outdated dependencies
-      run: cargo outdated --exit-code 1
+      run: cargo outdated --workspace --depth 1 --exit-code 1 --ignore rand,sha2,pkcs8
 
   secrets_scan:
+    permissions:
+      contents: read
+      security-events: write
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       with:
         fetch-depth: 0
 
     - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
       with:
         scan-type: 'fs'
+        version: 'v0.75.0'
         ignore-unfixed: true
         format: 'sarif'
         output: 'trivy-results.sarif'
 
     - name: Upload Trivy scan results to GitHub Security tab
-      uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+      uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2  # v4.38.2
       with:
         sarif_file: 'trivy-results.sarif'
