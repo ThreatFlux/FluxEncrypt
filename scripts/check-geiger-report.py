@@ -2,23 +2,26 @@
 """Validate a native informational Geiger report without dropping diagnostics."""
 import json
 import sys
-import tomllib
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
+
+import tomllib
 
 
 def validate_metrics(metrics, name):
     if not isinstance(metrics, dict) or not isinstance(metrics.get('forbids_unsafe'), bool):
-        raise ValueError(f'missing metrics for {name}')
+        raise TypeError(f'missing metrics for {name}')
     for scope in ['used', 'unused']:
         counts = metrics.get(scope)
         if not isinstance(counts, dict):
-            raise ValueError(f'missing {scope} metrics for {name}')
+            raise TypeError(f'missing {scope} metrics for {name}')
         for counter in ['functions', 'exprs', 'item_impls', 'item_traits', 'methods']:
             values = counts.get(counter, {})
             for kind in ['safe', 'unsafe_']:
                 value = values.get(kind)
-                if type(value) is not int or value < 0:
+                if type(value) is not int:
+                    raise TypeError(f'invalid {counter} count for {name}')
+                if value < 0:
                     raise ValueError(f'invalid {counter} count for {name}')
 
 
@@ -31,7 +34,7 @@ def validate_report(path, package):
     report = json.loads(path.read_text())
     for key in ['packages', 'packages_without_metrics', 'used_but_not_scanned_files']:
         if not isinstance(report.get(key), list):
-            raise ValueError(f'expected native report array: {key}')
+            raise TypeError(f'expected native report array: {key}')
     expected = {package, 'fluxencrypt'}
     for name in expected:
         entries = [entry for entry in report['packages'] if entry.get('package', {}).get('id', {}).get('name') == name]
@@ -43,7 +46,7 @@ def validate_report(path, package):
             raise ValueError(f'wrong package version for {name}')
         source = identity.get('source', {}).get('Path')
         if not isinstance(source, str):
-            raise ValueError(f'expected path package for {name}')
+            raise TypeError(f'expected path package for {name}')
         location = urlsplit(source)
         # Upstream may encode the Cargo package-id fragment into the file URL.
         local_path = Path(unquote(location.path).split('#', 1)[0]).resolve()

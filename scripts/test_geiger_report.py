@@ -5,9 +5,10 @@ import importlib.util
 import io
 import json
 import tempfile
-import tomllib
 import unittest
 from pathlib import Path
+
+import tomllib
 
 spec = importlib.util.spec_from_file_location('geiger_report', Path(__file__).with_name('check-geiger-report.py'))
 module = importlib.util.module_from_spec(spec)
@@ -45,13 +46,13 @@ class InventoryTests(unittest.TestCase):
             if change == 'source': entry['package']['id']['source'] = {'Path': ROOT.as_uri()}
             if change == 'empty_metrics': entry['unsafety'] = {}
             if change == 'boolean_count': entry['unsafety']['used']['exprs']['unsafe_'] = True
-            with self.subTest(change=change), self.assertRaises(ValueError):
+            with self.subTest(change=change), self.assertRaises((TypeError, ValueError)):
                 self.validate(invalid)
 
     def test_rejects_unrelated_package_and_missing_report_schema(self):
         with self.assertRaises(ValueError):
             self.validate(report(), 'unrelated')
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             self.validate({'packages': []})
 
 

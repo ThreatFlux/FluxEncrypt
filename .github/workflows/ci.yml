@@ -133,7 +133,6 @@ jobs:
     strategy:
       matrix:
         target:
-        - x86_64-pc-windows-gnu
         - aarch64-unknown-linux-gnu
         - armv7-unknown-linux-gnueabihf
     steps:
@@ -154,6 +153,42 @@ jobs:
       run: cargo install cross --version 0.2.5 --locked
     - name: Build
       run: cross build --locked --target ${{ matrix.target }} --workspace --all-features
+
+  windows-gnu:
+    name: Windows GNU
+    runs-on: windows-2025
+    defaults:
+      run:
+        shell: bash
+    env:
+      RUSTUP_TOOLCHAIN: 1.99.0
+      CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: 'C:\mingw64\bin\gcc.exe'
+      CC_x86_64_pc_windows_gnu: 'C:\mingw64\bin\gcc.exe'
+      AR_x86_64_pc_windows_gnu: 'C:\mingw64\bin\ar.exe'
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+    - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
+      with:
+        toolchain: 1.99.0
+        targets: x86_64-pc-windows-gnu
+    - name: Show compiler and linker versions
+      run: |
+        rustc --version --verbose
+        cargo --version
+        /c/mingw64/bin/gcc.exe -v
+        /c/mingw64/bin/ld.exe --version
+    - name: Cache dependencies
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-rust-1.99.0-x86_64-pc-windows-gnu-${{ hashFiles('**/Cargo.lock') }}
+    - name: Build Windows GNU
+      run: cargo build --locked --target x86_64-pc-windows-gnu --workspace --all-features
+    - name: Run Windows GNU executable
+      run: ./target/x86_64-pc-windows-gnu/debug/fluxencrypt-cli.exe --version
 
   cross-compile-macos:
     name: Cross Compile (macOS)
