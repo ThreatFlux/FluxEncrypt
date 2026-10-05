@@ -111,7 +111,6 @@ generated_keys/
 !fluxencrypt/src/keys/
 
 # Docker
-.dockerignore
 docker-compose.override.yml
 
 # Flamegraph
@@ -167,3 +166,8 @@ $RECYCLE.BIN/
 .directory
 .Trash-*
 .nfs*
+# Generated local dependency inventories
+*.cdx.json
+*.cdx.xml
+
+geiger-reports/

@@ -2,63 +2,78 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_BUILD_JOBS: 4
+  RUST_TEST_THREADS: 4
+  PROPTEST_CASES: 8
+  PROPTEST_MAX_SHRINK_ITERS: 10
   RUST_BACKTRACE: 1
 
 jobs:
   test:
     name: Test Suite
     runs-on: ubuntu-latest
+    env:
+      RUSTUP_TOOLCHAIN: ${{ matrix.rust }}
     strategy:
+      fail-fast: false
       matrix:
         rust:
-          - stable
-          - beta
-          - nightly
-          - 1.97.1  # MSRV
+        - 1.99.0
+        - beta
+        - nightly
+        - 1.97.1  # MSRV
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+      uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
       with:
         toolchain: ${{ matrix.rust }}
 
     - name: Cache dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
       with:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
           target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-rust-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Show compiler versions
+      run: |
+        rustc --version --verbose
+        cargo --version
 
     - name: Run tests
       env:
         PROPTEST_CASES: 8
         PROPTEST_MAX_SHRINK_ITERS: 10
-      run: cargo test --all-features --workspace --release
+      run: cargo test --locked --all-features --workspace --release
 
     - name: Run doctests
       env:
         PROPTEST_CASES: 8
         PROPTEST_MAX_SHRINK_ITERS: 10
-      run: cargo test --doc --all-features --workspace --release
+      run: cargo test --locked --doc --all-features --workspace --release
 
   fmt:
     name: Rustfmt
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+    - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
       with:
-        toolchain: stable
+        toolchain: 1.99.0
         components: rustfmt
     - run: cargo fmt --all -- --check
 
@@ -66,44 +81,51 @@ jobs:
     name: Clippy
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+    - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
       with:
-        toolchain: stable
+        toolchain: 1.99.0
         components: clippy
     - name: Cache dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
       with:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
           target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-    - run: cargo clippy --all-targets --all-features --workspace -- -D warnings
+        key: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-rust-1.99.0-${{ hashFiles('**/Cargo.lock') }}
+    - run: cargo clippy --locked --all-targets --all-features --workspace -- -D warnings
 
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+    - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
       with:
-        toolchain: stable
+        toolchain: 1.99.0
         components: llvm-tools-preview
     - name: Install cargo-llvm-cov
-      uses: taiki-e/install-action@bfd31bd857b898bbbe864a4d6dd024522cc2a128
+      uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a  # v2.87.25
       with:
-        tool: cargo-llvm-cov
+        tool: cargo-llvm-cov@0.9.1
     - name: Generate code coverage
       env:
         PROPTEST_CASES: 8
         PROPTEST_MAX_SHRINK_ITERS: 10
-      run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+      run: cargo llvm-cov --locked --release --all-features --workspace --lcov --output-path lcov.info
+    - name: Retain coverage report
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+      with:
+        name: coverage-lcov
+        path: lcov.info
+        if-no-files-found: error
     - name: Upload coverage reports to Codecov
-      uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7
+      uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5  # v7.1.1
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         slug: ThreatFlux/FluxEncrypt
+        version: v11.3.1
 
   cross-compile-linux:
     name: Cross Compile (Linux)
@@ -111,27 +133,62 @@ jobs:
     strategy:
       matrix:
         target:
-          - x86_64-pc-windows-gnu
-          - aarch64-unknown-linux-gnu
-          - armv7-unknown-linux-gnueabihf
+        - aarch64-unknown-linux-gnu
+        - armv7-unknown-linux-gnueabihf
     steps:
-    - uses: actions/checkout@v4
-    - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+    - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
       with:
-        toolchain: stable
+        toolchain: 1.99.0
         targets: ${{ matrix.target }}
     - name: Cache dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
       with:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
           target
-        key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-rust-1.99.0-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
     - name: Install cross
-      run: cargo install cross --git https://github.com/cross-rs/cross
+      run: cargo install cross --version 0.2.5 --locked
     - name: Build
-      run: cross build --target ${{ matrix.target }} --workspace
+      run: cross build --locked --target ${{ matrix.target }} --workspace --all-features
+
+  windows-gnu:
+    name: Windows GNU
+    runs-on: windows-2025
+    defaults:
+      run:
+        shell: bash
+    env:
+      RUSTUP_TOOLCHAIN: 1.99.0
+      CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: 'C:\mingw64\bin\gcc.exe'
+      CC_x86_64_pc_windows_gnu: 'C:\mingw64\bin\gcc.exe'
+      AR_x86_64_pc_windows_gnu: 'C:\mingw64\bin\ar.exe'
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+    - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
+      with:
+        toolchain: 1.99.0
+        targets: x86_64-pc-windows-gnu
+    - name: Show compiler and linker versions
+      run: |
+        rustc --version --verbose
+        cargo --version
+        /c/mingw64/bin/gcc.exe -v
+        /c/mingw64/bin/ld.exe --version
+    - name: Cache dependencies
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-rust-1.99.0-x86_64-pc-windows-gnu-${{ hashFiles('**/Cargo.lock') }}
+    - name: Build Windows GNU
+      run: cargo build --locked --target x86_64-pc-windows-gnu --workspace --all-features
+    - name: Run Windows GNU executable
+      run: ./target/x86_64-pc-windows-gnu/debug/fluxencrypt-cli.exe --version
 
   cross-compile-macos:
     name: Cross Compile (macOS)
@@ -139,60 +196,67 @@ jobs:
     strategy:
       matrix:
         target:
-          - x86_64-apple-darwin
-          - aarch64-apple-darwin
+        - x86_64-apple-darwin
+        - aarch64-apple-darwin
     steps:
-    - uses: actions/checkout@v4
-    - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+    - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
       with:
-        toolchain: stable
+        toolchain: 1.99.0
         targets: ${{ matrix.target }}
     - name: Cache dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
       with:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
           target
-        key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-rust-1.99.0-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
     - name: Build
-      run: cargo build --target ${{ matrix.target }} --workspace
+      run: cargo build --locked --target ${{ matrix.target }} --workspace --all-features
 
   benchmark:
+    permissions:
+      contents: write
     name: Benchmark
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+    - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
       with:
-        toolchain: stable
+        toolchain: 1.99.0
     - name: Cache dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
       with:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
           target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-rust-1.99.0-${{ hashFiles('**/Cargo.lock') }}
     - name: Run benchmarks
-      run: cargo bench --bench encryption_benchmarks -- --output-format bencher 2>/dev/null | tee benchmark_output.txt
-    - name: Verify benchmark results
+      shell: bash
       run: |
-        echo "Checking benchmark output:"
-        head -20 benchmark_output.txt
-        echo "File size:"
-        wc -l benchmark_output.txt
-    - name: Clean git state before benchmark action
-      run: |
-        # Stash only Cargo.lock changes made during benchmark run
-        if ! git diff --quiet -- Cargo.lock; then
-          echo "Stashing Cargo.lock changes before benchmark action..."
-          git stash push Cargo.lock -m "Temporary stash of Cargo.lock changes from benchmark"
-        fi
+        set -euo pipefail
+        cargo bench --locked --bench encryption_benchmarks -- --output-format bencher | tee benchmark_output.txt
+        grep -Eq '^test .* \.\.\. bench: +[0-9]' benchmark_output.txt
     - name: Store benchmark result
-      uses: benchmark-action/github-action-benchmark@4bdcce38c94cec68da58d012ac24b7b1155efe8b
+      uses: benchmark-action/github-action-benchmark@4322e5726e6334590d251fc4f92bec0efafc45dc  # v1.22.2
       with:
         tool: 'cargo'
         output-file-path: benchmark_output.txt
         github-token: ${{ secrets.GITHUB_TOKEN }}
         auto-push: ${{ github.event_name != 'pull_request' }}
+
+  features:
+    name: Feature combinations
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+    - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
+      with:
+        toolchain: 1.99.0
+    - uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a  # v2.87.25
+      with:
+        tool: cargo-hack@0.6.45
+    - run: cargo hack check --locked --workspace --feature-powerset --all-targets
+    - run: cargo test --locked -p fluxencrypt --no-default-features --lib --release

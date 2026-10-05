@@ -84,5 +84,9 @@ name = "property_tests"
 path = "../tests/property_tests.rs"
 
 [[test]]
-name = "e2e_test"
-path = "../tests/e2e/cli_e2e.rs"
+name = "go_compatibility_test"
+path = "../tests/go_compatibility_test.rs"
+
+[[test]]
+name = "crypto_integration"
+path = "../tests/integration/crypto_integration.rs"

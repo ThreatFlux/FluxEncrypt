@@ -46,7 +46,7 @@ walkdir = "2.5.0"
 glob = "0.3.4"
 
 # System utilities
-dirs = "6.0.0"
+dirs = "7.0.0"
 
 # Performance
 rayon = { workspace = true, optional = true }
@@ -59,3 +59,7 @@ predicates = "3.1.4"
 [features]
 default = ["parallel"]
 parallel = ["dep:rayon", "fluxencrypt/parallel"]
+
+[[test]]
+name = "e2e_test"
+path = "../tests/e2e/cli_e2e.rs"

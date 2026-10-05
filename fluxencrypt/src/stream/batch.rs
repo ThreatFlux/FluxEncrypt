@@ -9,7 +9,9 @@ use crate::error::{FluxError, Result};
 use crate::keys::{PrivateKey, PublicKey};
 use crate::stream::{FileStreamCipher, cipher::ProgressCallback};
 use std::path::{Component, Path, PathBuf};
+#[cfg(feature = "parallel")]
 use std::sync::Arc;
+#[cfg(feature = "parallel")]
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Type alias for batch operation results

@@ -2,72 +2,81 @@ name: Documentation
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_BUILD_JOBS: 4
 
 jobs:
   docs:
+    permissions:
+      contents: write
     name: Build Documentation
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+      uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
       with:
-        toolchain: stable
+        toolchain: 1.99.0
 
     - name: Cache dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
       with:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
           target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-rust-1.99.0-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Build documentation
       run: |
-        cargo doc --all-features --no-deps --workspace
+        RUSTDOCFLAGS="-D warnings" cargo doc --locked --all-features --no-deps --workspace
         echo '<meta http-equiv="refresh" content="0; url=fluxencrypt">' > target/doc/index.html
-
-    - name: Check for broken internal links
-      run: cargo doc --all-features --no-deps --workspace 2>&1 | grep -E "warning.*intra-doc link" && exit 1 || exit 0
 
     - name: Deploy to GitHub Pages
       if: github.ref == 'refs/heads/main'
-      uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e
+      uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453  # v4.1.0
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: ./target/doc
         force_orphan: true
 
   mdbook:
+    permissions:
+      contents: write
     name: Build MDBook
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
     - name: Setup mdBook
-      uses: peaceiris/actions-mdbook@ee69d230fe19748b7abf22df32acaa93833fad08
+      uses: peaceiris/actions-mdbook@ee69d230fe19748b7abf22df32acaa93833fad08  # v2.0.0
       with:
-        mdbook-version: 'latest'
+        mdbook-version: '0.5.4'
 
     - name: Build book (if docs/ exists)
+      id: book
       run: |
         if [ -d "docs" ] && [ -f "docs/book.toml" ]; then
           cd docs
           mdbook build
+          echo "built=true" >> "$GITHUB_OUTPUT"
           cd ..
         else
           echo "No mdbook documentation found, skipping..."
         fi
 
     - name: Deploy book to GitHub Pages
-      if: github.ref == 'refs/heads/main'
-      uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e
+      if: github.ref == 'refs/heads/main' && steps.book.outputs.built == 'true'
+      uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453  # v4.1.0
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: ./docs/book
@@ -78,36 +87,21 @@ jobs:
     name: Check Examples
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+      uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
       with:
-        toolchain: stable
+        toolchain: 1.99.0
 
     - name: Cache dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
       with:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
           target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-rust-1.99.0-${{ hashFiles('**/Cargo.lock') }}
 
-    - name: Check examples compile
-      run: |
-        for example in fluxencrypt/examples/*.rs; do
-          if [ -f "$example" ]; then
-            echo "Checking example: $example"
-            cargo check --example "$(basename "$example" .rs)" --manifest-path fluxencrypt/Cargo.toml
-          fi
-        done
-
-    - name: Run examples
-      run: |
-        for example in fluxencrypt/examples/*.rs; do
-          if [ -f "$example" ]; then
-            echo "Running example: $example"
-            timeout 30s cargo run --example "$(basename "$example" .rs)" --manifest-path fluxencrypt/Cargo.toml || true
-          fi
-        done
+    - name: Compile and run all examples
+      run: make examples-check

@@ -4,20 +4,20 @@ use crate::cli_helpers::*;
 use std::fs;
 
 #[test]
-#[ignore = "Requires built CLI binary"]
 fn test_config_command() {
     let env = TestEnvironment::new();
-    let config_file = env.temp_dir.path().join("fluxencrypt.toml");
-
-    // Generate default config
-    generate_config(&config_file);
-
-    // Validate config
-    validate_config(&config_file);
+    let output = std::process::Command::new(get_cli_path())
+        .args(["config", "show"])
+        .env("HOME", env.temp_dir.path())
+        .env("XDG_CONFIG_HOME", env.temp_dir.path())
+        .env("APPDATA", env.temp_dir.path())
+        .output()
+        .expect("config show");
+    assert_cli_success(&output, "Config show");
+    assert_output_contains(&output, &["Configuration"]);
 }
 
 #[test]
-#[ignore = "Requires built CLI binary"]
 fn test_info_command() {
     let env = TestEnvironment::new();
 
@@ -30,7 +30,6 @@ fn test_info_command() {
 }
 
 #[test]
-#[ignore = "Requires built CLI binary"]
 fn test_verify_command() {
     let env = TestEnvironment::new();
 
@@ -42,7 +41,6 @@ fn test_verify_command() {
 }
 
 #[test]
-#[ignore = "Requires built CLI binary"]
 fn test_error_handling() {
     let env = TestEnvironment::new();
 
@@ -51,7 +49,6 @@ fn test_error_handling() {
 }
 
 #[test]
-#[ignore = "Requires built CLI binary"]
 fn test_environment_variables() {
     let env = TestEnvironment::new();
 
@@ -63,51 +60,16 @@ fn test_environment_variables() {
 }
 
 #[test]
-#[ignore = "Requires built CLI binary"]
 fn test_benchmark_command() {
     test_benchmark();
 }
 
-fn generate_config(config_file: &std::path::Path) {
-    let output = run_cli(&[
-        "config",
-        "generate",
-        "--output",
-        config_file.to_str().unwrap(),
-    ]);
-
-    assert_cli_success(&output, "Config generation");
-    assert!(config_file.exists(), "Config file should be created");
-
-    let config_content = fs::read_to_string(config_file).unwrap();
-    assert!(config_content.contains("cipher_suite"));
-    assert!(config_content.contains("rsa_key_size"));
-}
-
-fn validate_config(config_file: &std::path::Path) {
-    let output = run_cli(&[
-        "config",
-        "validate",
-        "--config",
-        config_file.to_str().unwrap(),
-    ]);
-
-    assert_cli_success(&output, "Config validation");
-
-    assert_output_contains(&output, &["valid", "Valid"]);
-}
-
 fn get_key_info(env: &TestEnvironment) {
-    let output = run_cli(&[
-        "info",
-        "key",
-        "--public-key",
-        env.public_key_path.to_str().unwrap(),
-    ]);
+    let output = run_cli(&["info", "--file", env.public_key_path.to_str().unwrap()]);
 
     assert_cli_success(&output, "Key info");
 
-    assert_output_contains(&output, &["2048", "RSA", "rsa"]);
+    assert_output_contains(&output, &["Public Key", "PEM"]);
 }
 
 fn setup_for_verification(env: &TestEnvironment) {
@@ -120,7 +82,8 @@ fn setup_for_verification(env: &TestEnvironment) {
     let encrypted_file = env.temp_dir.path().join("encrypted.enc");
     let output = run_cli(&[
         "encrypt",
-        "--public-key",
+        "--raw",
+        "--key",
         env.public_key_path.to_str().unwrap(),
         "--input",
         input_file.to_str().unwrap(),
@@ -135,21 +98,21 @@ fn verify_encrypted_file(env: &TestEnvironment) {
 
     let output = run_cli(&[
         "verify",
-        "--private-key",
+        "--key",
         env.private_key_path.to_str().unwrap(),
-        "--input",
+        "--file",
         encrypted_file.to_str().unwrap(),
     ]);
 
     assert_cli_success(&output, "Verification");
 
-    assert_output_contains(&output, &["valid", "Valid", "OK"]);
+    assert_output_contains(&output, &["completed successfully"]);
 }
 
 fn test_nonexistent_file_error(env: &TestEnvironment) {
     let output = run_cli(&[
         "encrypt",
-        "--public-key",
+        "--key",
         "/nonexistent/public.pem",
         "--input",
         "/nonexistent/input.txt",
@@ -190,32 +153,21 @@ fn test_env_vars(env: &TestEnvironment) {
         .output()
         .expect("Failed to execute CLI with environment variables");
 
-    if output.status.success() {
-        assert!(
-            encrypted_file.exists(),
-            "Should encrypt using environment variable"
-        );
-    } else {
-        // If the CLI doesn't support environment variables yet, that's okay
-        eprintln!("Environment variable support not implemented yet");
-    }
+    assert_cli_success(&output, "Environment public key encryption");
+    assert!(encrypted_file.exists());
 }
 
 fn test_benchmark() {
     let output = run_cli(&[
         "benchmark",
-        "--key-size",
+        "--key-sizes",
         "2048",
-        "--data-size",
-        "1024",
+        "--sizes",
+        "1",
         "--iterations",
         "10",
     ]);
 
-    if output.status.success() {
-        assert_output_contains(&output, &["benchmark", "performance", "ms"]);
-    } else {
-        // If benchmark command is not implemented yet, that's okay
-        eprintln!("Benchmark command not implemented yet");
-    }
+    assert_cli_success(&output, "Benchmark command");
+    assert_output_contains(&output, &["Benchmark"]);
 }
