@@ -26,7 +26,7 @@ ring = "0.17.14"
 # three crates below stay on those lines until rsa 0.10 ships stable.
 rsa = "0.9.10"
 pkcs8 = { version = "0.10.2", features = ["pkcs5", "encryption", "pem"] }
-sha2 = "0.10.9"
+sha2 = "0.11.0"
 zeroize = { version = "1.9.0", features = ["derive"] }
 
 # Encoding and serialization
