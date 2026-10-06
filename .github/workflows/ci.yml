@@ -34,9 +34,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      with:
+        persist-credentials: false
 
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
+      uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # v1
       with:
         toolchain: ${{ matrix.rust }}
 
@@ -71,7 +73,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-    - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # v1
       with:
         toolchain: 1.99.0
         components: rustfmt
@@ -82,7 +86,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-    - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # v1
       with:
         toolchain: 1.99.0
         components: clippy
@@ -99,9 +105,14 @@ jobs:
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # Codecov OIDC upload; no CODECOV_TOKEN secret is read.
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-    - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # v1
       with:
         toolchain: 1.99.0
         components: llvm-tools-preview
@@ -123,9 +134,11 @@ jobs:
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5  # v7.1.1
       with:
-        token: ${{ secrets.CODECOV_TOKEN }}
+        use_oidc: true
         slug: ThreatFlux/FluxEncrypt
         version: v11.3.1
+        files: lcov.info
+        fail_ci_if_error: ${{ github.event_name == 'push' }}
 
   cross-compile-linux:
     name: Cross Compile (Linux)
@@ -137,7 +150,9 @@ jobs:
         - armv7-unknown-linux-gnueabihf
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-    - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # v1
       with:
         toolchain: 1.99.0
         targets: ${{ matrix.target }}
@@ -152,7 +167,9 @@ jobs:
     - name: Install cross
       run: cargo install cross --version 0.2.5 --locked
     - name: Build
-      run: cross build --locked --target ${{ matrix.target }} --workspace --all-features
+      env:
+        TARGET: ${{ matrix.target }}
+      run: cross build --locked --target "$TARGET" --workspace --all-features
 
   windows-gnu:
     name: Windows GNU
@@ -167,7 +184,9 @@ jobs:
       AR_x86_64_pc_windows_gnu: 'C:\mingw64\bin\ar.exe'
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-    - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # v1
       with:
         toolchain: 1.99.0
         targets: x86_64-pc-windows-gnu
@@ -200,7 +219,9 @@ jobs:
         - aarch64-apple-darwin
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-    - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # v1
       with:
         toolchain: 1.99.0
         targets: ${{ matrix.target }}
@@ -213,16 +234,20 @@ jobs:
           target
         key: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-rust-1.99.0-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
     - name: Build
-      run: cargo build --locked --target ${{ matrix.target }} --workspace --all-features
+      env:
+        TARGET: ${{ matrix.target }}
+      run: cargo build --locked --target "$TARGET" --workspace --all-features
 
   benchmark:
     permissions:
-      contents: write
+      contents: write  # Pushes benchmark history to gh-pages on main; pull requests only compare.
     name: Benchmark
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-    - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # v1
       with:
         toolchain: 1.99.0
     - name: Cache dependencies
@@ -252,7 +277,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-    - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # v1
       with:
         toolchain: 1.99.0
     - uses: taiki-e/install-action@183e4297cca2404691e9380e1307288dced5c82a  # v2.87.25
@@ -260,3 +287,24 @@ jobs:
         tool: cargo-hack@0.6.45
     - run: cargo hack check --locked --workspace --feature-powerset --all-targets
     - run: cargo test --locked -p fluxencrypt --no-default-features --lib --release
+
+  docker:
+    name: Docker (${{ matrix.dockerfile }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dockerfile:
+        - Dockerfile
+        - docker/Dockerfile
+        - docker/Dockerfile.alpine
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      with:
+        persist-credentials: false
+    - name: Build image
+      env:
+        DOCKERFILE: ${{ matrix.dockerfile }}
+      run: docker build --file "$DOCKERFILE" --tag fluxencrypt:ci .
+    - name: Smoke test image
+      run: ./scripts/docker-smoke.sh fluxencrypt:ci

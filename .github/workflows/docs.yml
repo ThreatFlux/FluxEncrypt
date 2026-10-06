@@ -15,14 +15,16 @@ env:
 jobs:
   docs:
     permissions:
-      contents: write
+      contents: write  # Deploys rustdoc to gh-pages on main.
     name: Build Documentation
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      with:
+        persist-credentials: false
 
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
+      uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # v1
       with:
         toolchain: 1.99.0
 
@@ -50,12 +52,14 @@ jobs:
 
   mdbook:
     permissions:
-      contents: write
+      contents: write  # Deploys the book to gh-pages on main.
     name: Build MDBook
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      with:
+        persist-credentials: false
 
     - name: Setup mdBook
       uses: peaceiris/actions-mdbook@ee69d230fe19748b7abf22df32acaa93833fad08  # v2.0.0
@@ -88,9 +92,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      with:
+        persist-credentials: false
 
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
+      uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # v1
       with:
         toolchain: 1.99.0
 

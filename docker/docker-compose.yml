@@ -1,5 +1,12 @@
-version: '3.8'
-
+# Run from the docker/ directory, e.g. `docker compose run --rm fluxencrypt --help`.
+# The CLI exits after each command, so the services are not restarted.
+#
+# ./data is bind-mounted over the image's /data working directory, where keygen
+# writes by default. Run as your own user so the mounted directory is writable
+# and the generated files are yours:
+#   FLUXENCRYPT_UID=$(id -u) FLUXENCRYPT_GID=$(id -g) docker compose run --rm fluxencrypt keygen
+# Without them the images' own non-root users are used (65532 on distroless,
+# 1000 on Alpine), which then need write access to ./data.
 services:
   fluxencrypt:
     build:
@@ -7,48 +14,28 @@ services:
       dockerfile: docker/Dockerfile
     image: threatflux/fluxencrypt:latest
     container_name: fluxencrypt
+    user: "${FLUXENCRYPT_UID:-65532}:${FLUXENCRYPT_GID:-65532}"
     volumes:
-      - ./data:/data
-      - ./keys:/keys:ro
+    - ./data:/data
+    - ./keys:/keys:ro
     environment:
-      - RUST_LOG=info
-      - FLUX_CONFIG_PATH=/data/config.toml
+    - RUST_LOG=info
+    - FLUX_CONFIG_PATH=/data/config.toml
     command: ["--help"]
-    restart: unless-stopped
-    
+    restart: "no"
+
   fluxencrypt-alpine:
     build:
       context: ..
       dockerfile: docker/Dockerfile.alpine
     image: threatflux/fluxencrypt:alpine
     container_name: fluxencrypt-alpine
+    user: "${FLUXENCRYPT_UID:-1000}:${FLUXENCRYPT_GID:-1000}"
     volumes:
-      - ./data:/data
-      - ./keys:/keys:ro
+    - ./data:/data
+    - ./keys:/keys:ro
     environment:
-      - RUST_LOG=info
-      - FLUX_CONFIG_PATH=/data/config.toml
+    - RUST_LOG=info
+    - FLUX_CONFIG_PATH=/data/config.toml
     command: ["--version"]
-    restart: unless-stopped
-
-  # Development container with source mounted
-  fluxencrypt-dev:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.dev
-    image: threatflux/fluxencrypt:dev
-    container_name: fluxencrypt-dev
-    volumes:
-      - ..:/workspace
-      - ./data:/data
-    working_dir: /workspace
-    environment:
-      - RUST_LOG=debug
-    command: ["tail", "-f", "/dev/null"]  # Keep container running
-    restart: unless-stopped
-
-volumes:
-  data:
-    driver: local
-  keys:
-    driver: local
+    restart: "no"

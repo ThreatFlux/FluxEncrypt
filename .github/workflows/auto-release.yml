@@ -1,12 +1,20 @@
 name: Auto Release
 
 concurrency:
-  group: auto-release-${{ github.event.workflow_run.head_branch || github.ref_name || 'main' }}
+  # Key on the head repository too, so a fork branch named "main" cannot cancel
+  # a release run for this repository's main. Dry runs use their own group so
+  # they never cancel a real release.
+  group: auto-release-${{ github.event.workflow_run.head_repository.full_name || github.repository }}-${{ github.event.workflow_run.head_branch || github.ref_name || 'main' }}${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '-dry-run' || '' }}
   cancel-in-progress: true
 
-on:
+# workflow_run is what lets a release wait for CI and Security Audit on the
+# pushed commit. It is only acted on for successful push runs of this
+# repository's own main (see the job condition below); the reusable workflow
+# re-checks the required workflows for that commit, never runs the triggering
+# run's code, and passes no event data to a shell.
+on:  # zizmor: ignore[dangerous-triggers]
   workflow_run:
-    workflows: ["CI", "Security Audit"]
+    workflows: [CI, Security Audit]
     types: [completed]
     branches: [main]
   workflow_dispatch:
@@ -21,19 +29,43 @@ on:
         - patch
         - minor
         - major
+      dry_run:
+        description: Report the next release without creating a commit, tag, or release
+        required: false
+        default: false
+        type: boolean
 
 permissions:
-  actions: read
   contents: read
-  pull-requests: read
 
 jobs:
   release:
+    # Pull-request and fork runs also complete CI; only a successful push to
+    # this repository's main may start a release.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository)
+    # The reusable workflow's release job declares these GITHUB_TOKEN scopes;
+    # the App token does the writes when the App is configured.
     permissions:
-      actions: write
-      contents: write
-      pull-requests: write
-    uses: ThreatFlux/github_actions/.github/workflows/reusable-auto-release.yml@7a5f08885a77520db023882c8de17d9e6580b7ae  # v0.7.5
+      actions: write  # Dispatches release workflows on the GITHUB_TOKEN path.
+      contents: write  # Release commit, tag and GitHub Release.
+      pull-requests: write  # Optional release pull request (create-pr).
+    uses: ThreatFlux/github_actions/.github/workflows/reusable-auto-release.yml@eb9f3cf78c3899be0c4c9323d5cc86de5e1fdee8  # v0.7.7
     with:
       bump: ${{ github.event.inputs.version_bump || 'auto' }}
+      # Only a manual dispatch can request a dry run; workflow_run always releases.
+      dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
       required-workflows: ci.yml,security.yml
+      # The threatflux-automation App pushes the release tag, and an App push
+      # starts release.yml through its `push: tags` trigger, so the reusable
+      # workflow skips this dispatch for App releases. It only dispatches
+      # release.yml (with the version) when GITHUB_TOKEN cut the release,
+      # because a GITHUB_TOKEN tag starts no workflow.
+      dispatch-workflows: release.yml
+      dispatch-version-workflow: release.yml
+      github-app-id: ${{ vars.TF_AUTOMATION_APP_ID }}
+    secrets:
+      github-app-private-key: ${{ secrets.TF_AUTOMATION_APP_PRIVATE_KEY }}
