@@ -509,27 +509,42 @@ jobs:
       shell: bash
       run: |
         set -euo pipefail
+        # Path of a crate's file in the sparse index (index.crates.io), which
+        # is what Cargo resolves the next crate's dependencies through.
+        index_path() {
+          local name="${1,,}"
+          case "${#name}" in
+            1) echo "1/${name}" ;;
+            2) echo "2/${name}" ;;
+            3) echo "3/${name:0:1}/${name}" ;;
+            *) echo "${name:0:2}/${name:2:2}/${name}" ;;
+          esac
+        }
         read -r -a pending <<< "${PENDING}"
         for spec in "${pending[@]}"; do
           package="${spec%@*}"
           version="${spec#*@}"
           cargo publish --locked --all-features -p "${package}"
-          # Wait until crates.io serves the new version before publishing
-          # crates that depend on it; a version it never serves fails the run.
-          served=false
-          for _ in $(seq 1 20); do
-            if curl --fail --silent --show-error --location \
+          # crates.io records a version before its background job rewrites the
+          # index, and Cargo's own wait for it can time out with only a
+          # warning. Publish the crates that depend on this one only once the
+          # sparse index lists it; a version it never lists fails the run.
+          url="https://index.crates.io/$(index_path "${package}")"
+          indexed=false
+          for _ in $(seq 1 30); do
+            if curl --fail --silent --show-error --location --header 'Cache-Control: no-cache' \
               --user-agent "${GITHUB_REPOSITORY}-release/${GITHUB_RUN_ID} (https://github.com/${GITHUB_REPOSITORY})" \
-              --output /dev/null "https://crates.io/api/v1/crates/${package}/${version}"; then
-              served=true
+              "${url}" | jq -e --arg version "${version}" 'select(.vers == $version)' > /dev/null; then
+              indexed=true
               break
             fi
-            sleep 15
+            sleep 10
           done
-          if [[ "${served}" != "true" ]]; then
-            echo "::error::crates.io did not serve ${spec} within 5 minutes of publishing it"
+          if [[ "${indexed}" != "true" ]]; then
+            echo "::error::the crates.io index did not list ${spec} within 5 minutes of publishing it"
             exit 1
           fi
+          echo "${spec} is published and in the crates.io index"
         done
 
   docker:
