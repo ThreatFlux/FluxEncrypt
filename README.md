@@ -235,8 +235,8 @@ The CLI is also published to the GitHub Container Registry as
 release is tagged with its version (for example `0.7.9`); `0.7`, `0` and
 `latest` point at the newest release of their line. `main` and the short
 commit SHA follow the `main` branch. A tag is applied only after every
-platform passed its smoke test, the image was scanned with Trivy and it was
-signed with keyless [cosign](https://github.com/sigstore/cosign). The image is
+platform passed its smoke test and its Trivy scan and the image was signed
+with keyless [cosign](https://github.com/sigstore/cosign). The image is
 distroless (no shell), runs as the non-root user 65532, and its entrypoint is
 the CLI:
 

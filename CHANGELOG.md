@@ -19,9 +19,12 @@ No library, async or CLI code changed; the crates behave exactly as 0.7.8.
   `main` and the short commit SHA) and every release tag (tag `X.Y.Z`, and
   `X.Y`, `X` and `latest` when it is the newest release of that line). The
   image is pushed by digest and tagged only after each platform passed its
-  smoke test (key generation and an encrypt/decrypt roundtrip), Trivy scanned
-  it and cosign signed it. An SPDX SBOM is kept with the run. Pull requests
-  build and test `linux/amd64` without pushing.
+  smoke test (key generation and an encrypt/decrypt roundtrip) and its Trivy
+  scan, and cosign signed it. An SPDX SBOM for each platform is kept with the
+  run. Pull requests build and test `linux/amd64` without pushing. When a
+  release is cut with `GITHUB_TOKEN` instead of the automation App,
+  auto-release now dispatches `docker.yml` on the new tag as well as
+  `release.yml`.
 
 ### Changed
 - When CHANGELOG.md has no section for a release and the auto-release notes

@@ -59,6 +59,7 @@ jobs:
     outputs:
       digest: ${{ steps.build.outputs.digest }}
       image_name: ${{ steps.lowercase.outputs.image_name }}
+      platforms: ${{ steps.platforms.outputs.json }}
     steps:
     - name: Checkout
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -68,6 +69,20 @@ jobs:
     - name: Lowercase image name
       id: lowercase
       run: echo "image_name=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      # The platforms this run builds, as JSON for the scan and SBOM matrices:
+      # pull requests build linux/amd64 only.
+    - name: Select platforms
+      id: platforms
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+      run: |
+        set -euo pipefail
+        platforms="${PLATFORMS}"
+        if [[ "${EVENT_NAME}" == "pull_request" ]]; then
+          platforms="linux/amd64"
+        fi
+        echo "json=$(jq -cn --arg platforms "${platforms}" '$platforms | split(",")')" >> "$GITHUB_OUTPUT"
 
       # The arm64 image is compiled under QEMU on the amd64 runner; pull
       # requests build linux/amd64 only and do not need it.
@@ -187,10 +202,16 @@ jobs:
         if-no-files-found: error
         retention-days: 1
 
+  # One Trivy scan per built platform; every one must succeed before the
+  # image is signed and tagged.
   scan:
-    name: Security Scan
+    name: Security Scan (${{ matrix.platform }})
     needs: build
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJSON(needs.build.outputs.platforms) }}
     permissions:
       contents: read
       packages: read  # Pulls the pushed image from GHCR.
@@ -215,14 +236,20 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Pull image
-      if: github.event_name != 'pull_request'
+    - name: Name the code scanning category
+      id: category
       env:
-        IMAGE: ${{ env.REGISTRY }}/${{ needs.build.outputs.image_name }}@${{ needs.build.outputs.digest }}
-      run: docker pull "${IMAGE}"
+        PLATFORM: ${{ matrix.platform }}
+      run: echo "value=docker-image-${PLATFORM//\//-}" >> "$GITHUB_OUTPUT"
 
     - name: Run Trivy scanner
       uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+      env:
+        # Trivy otherwise picks linux/amd64 from a multi-platform index. Pushed
+        # images are read from the registry for this platform; the pull
+        # request image comes from the local Docker engine.
+        TRIVY_PLATFORM: ${{ matrix.platform }}
+        TRIVY_IMAGE_SRC: ${{ github.event_name == 'pull_request' && 'docker' || 'remote' }}
       with:
         image-ref: ${{ github.event_name == 'pull_request' && format('{0}:scan', needs.build.outputs.image_name) || format('{0}/{1}@{2}', env.REGISTRY, needs.build.outputs.image_name, needs.build.outputs.digest) }}
         format: sarif
@@ -239,7 +266,7 @@ jobs:
       uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2  # v4.38.2
       with:
         sarif_file: trivy-results.sarif
-        category: docker-image
+        category: ${{ steps.category.outputs.value }}
 
   sign:
     name: Sign Container
@@ -373,12 +400,18 @@ jobs:
           echo "- \`${tag}\`" >> "$GITHUB_STEP_SUMMARY"
         done
 
+  # One SPDX SBOM per pushed platform: Syft otherwise catalogs only the
+  # runner's platform of a multi-platform index.
   sbom:
-    name: Generate SBOM
+    name: Generate SBOM (${{ matrix.platform }})
     needs: build
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request'
-    # Read-only: keeps the SBOM as a workflow artifact.
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJSON(needs.build.outputs.platforms) }}
+    # Read-only: keeps the SBOMs as workflow artifacts.
     permissions:
       contents: read
       packages: read  # Pulls the pushed image from GHCR.
@@ -390,12 +423,33 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
+    - name: Install Syft
+      id: syft
+      uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c  # v0.24.3
+
     - name: Generate SBOM
-      uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c  # v0.24.3
+      id: sbom
+      env:
+        SYFT: ${{ steps.syft.outputs.cmd }}
+        IMAGE: ${{ env.REGISTRY }}/${{ needs.build.outputs.image_name }}@${{ needs.build.outputs.digest }}
+        PLATFORM: ${{ matrix.platform }}
+      run: |
+        set -euo pipefail
+        name="sbom-${PLATFORM//\//-}"
+        "${SYFT}" scan "registry:${IMAGE}" --platform "${PLATFORM}" \
+          --output "spdx-json=${RUNNER_TEMP}/${name}.spdx.json" \
+          --output "syft-json=${RUNNER_TEMP}/${name}.syft.json"
+        # The SBOM must describe the requested platform, not the runner's.
+        jq -e --arg os "${PLATFORM%%/*}" --arg arch "${PLATFORM#*/}" \
+          '.source.metadata.os == $os and .source.metadata.architecture == $arch' \
+          "${RUNNER_TEMP}/${name}.syft.json" > /dev/null
+        jq -e '.packages | length > 0' "${RUNNER_TEMP}/${name}.spdx.json" > /dev/null
+        echo "name=${name}.spdx.json" >> "$GITHUB_OUTPUT"
+        echo "path=${RUNNER_TEMP}/${name}.spdx.json" >> "$GITHUB_OUTPUT"
+
+    - name: Upload SBOM
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
       with:
-        image: ${{ env.REGISTRY }}/${{ needs.build.outputs.image_name }}@${{ needs.build.outputs.digest }}
-        artifact-name: sbom.spdx.json
-        format: spdx-json
-        # Attaching to a GitHub Release needs contents: write; release.yml
-        # attaches the release SBOMs, so this job keeps a workflow artifact.
-        upload-release-assets: false
+        name: ${{ steps.sbom.outputs.name }}
+        path: ${{ steps.sbom.outputs.path }}
+        if-no-files-found: error
