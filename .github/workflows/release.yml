@@ -232,11 +232,13 @@ jobs:
           # Auto-release already wrote notes from the commit history, but they
           # only list features and fixes, so a release of other commits gets a
           # heading and nothing else. A CHANGELOG.md section for this version
-          # replaces them, and so does the commit list when they have no entries.
+          # replaces them. The commit list replaces them only when they hold
+          # nothing but headings and blank lines, so hand-written notes
+          # (prose or lists) survive a rerun.
           if [[ "$NOTES_FROM_CHANGELOG" == "true" ]]; then
             gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TITLE" --notes-file release_notes.md
-          elif ! grep -Eq '^[-*] ' <<< "$EXISTING_NOTES"; then
-            echo "The existing notes of ${TAG} list no changes; replacing them with the commits since the previous tag"
+          elif ! grep -Evq '^[[:space:]]*(#.*)?$' <<< "$EXISTING_NOTES"; then
+            echo "The existing notes of ${TAG} hold only headings; replacing them with the commits since the previous tag"
             gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TITLE" --notes-file release_notes.md
           else
             echo "Keeping the existing notes of ${TAG}: CHANGELOG.md has no section for ${VERSION}"
