@@ -25,7 +25,7 @@ ring = "0.17.14"
 # Its public API is built on pkcs8 0.10, digest/sha2 0.10 and rand_core 0.6, so the
 # three crates below stay on those lines until rsa 0.10 ships stable.
 rsa = "0.9.10"
-pkcs8 = { version = "0.10.2", features = ["pkcs5", "encryption", "pem"] }
+pkcs8 = { version = "0.11.0", features = ["pkcs5", "encryption", "pem"] }
 sha2 = "0.10.9"
 zeroize = { version = "1.9.0", features = ["derive"] }
 
