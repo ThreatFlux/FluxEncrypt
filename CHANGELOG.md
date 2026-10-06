@@ -22,6 +22,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `futures` requirement to 0.3.34. Everything else was already at its latest
   stable version; `generic-array` stays on 0.14.7 because `crypto-common` 0.1.7
   pins it exactly.
+- Releases now come from tag-triggered `release.yml`: it builds the CLI for six
+  targets, attaches CycloneDX SBOMs, and publishes `fluxencrypt`,
+  `fluxencrypt-async` and `fluxencrypt-cli` to crates.io through trusted
+  publishing (OIDC) instead of a stored registry token. `release.yml` and
+  `auto-release.yml` both accept `dry_run`. The manual prepare-release workflow
+  that pushed directly to `main` is gone.
+- The `Dockerfile` and `docker/Dockerfile` runtimes are now
+  `gcr.io/distroless/cc-debian13:nonroot` (no shell or package manager, uid
+  65532, `tini` as PID 1), and CI builds and smoke-tests all three Dockerfiles.
+- CI hardening: Codecov uploads use OIDC, checkouts no longer persist
+  credentials, CodeQL also analyzes the workflows, and Dependabot covers Cargo,
+  GitHub Actions and Docker.
 
 ### Removed
 - Dropped the unused `num-bigint` and `num-traits` dependencies; neither was

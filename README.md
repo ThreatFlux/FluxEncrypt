@@ -1,6 +1,6 @@
 # FluxEncrypt
 
-[![CI](https://github.com/ThreatFlux/fluxencrypt/workflows/CI/badge.svg)](https://github.com/ThreatFlux/fluxencrypt/actions)
+[![CI](https://github.com/ThreatFlux/FluxEncrypt/actions/workflows/ci.yml/badge.svg)](https://github.com/ThreatFlux/FluxEncrypt/actions/workflows/ci.yml)
 [![Security Audit](https://github.com/ThreatFlux/FluxEncrypt/actions/workflows/security.yml/badge.svg)](https://github.com/ThreatFlux/FluxEncrypt/actions/workflows/security.yml)
 [![Crates.io](https://img.shields.io/crates/v/fluxencrypt.svg)](https://crates.io/crates/fluxencrypt)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/f7735393ff1e4afab40895af059ad36b)](https://app.codacy.com/gh/ThreatFlux/FluxEncrypt/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
@@ -58,18 +58,17 @@ A high-performance, secure encryption SDK for Rust applications, providing both 
 
 ### Installation
 
-Add FluxEncrypt to your `Cargo.toml`:
+FluxEncrypt is published on [crates.io](https://crates.io/crates/fluxencrypt). Add it to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-fluxencrypt = "0.5.0"
+fluxencrypt = "0.7"
 
 # For async support
-fluxencrypt-async = "0.5.0"
-
-# For CLI usage
-fluxencrypt-cli = "0.5.0"
+fluxencrypt-async = "0.7"
 ```
+
+Install the command-line tool with `cargo install fluxencrypt-cli`.
 
 ### Basic Usage
 

@@ -1,5 +1,5 @@
-version: '3.8'
-
+# Run from the docker/ directory, e.g. `docker compose run --rm fluxencrypt --help`.
+# The CLI exits after each command, so the services are not restarted.
 services:
   fluxencrypt:
     build:
@@ -8,14 +8,14 @@ services:
     image: threatflux/fluxencrypt:latest
     container_name: fluxencrypt
     volumes:
-      - ./data:/data
-      - ./keys:/keys:ro
+    - ./data:/data
+    - ./keys:/keys:ro
     environment:
-      - RUST_LOG=info
-      - FLUX_CONFIG_PATH=/data/config.toml
+    - RUST_LOG=info
+    - FLUX_CONFIG_PATH=/data/config.toml
     command: ["--help"]
-    restart: unless-stopped
-    
+    restart: "no"
+
   fluxencrypt-alpine:
     build:
       context: ..
@@ -23,32 +23,10 @@ services:
     image: threatflux/fluxencrypt:alpine
     container_name: fluxencrypt-alpine
     volumes:
-      - ./data:/data
-      - ./keys:/keys:ro
+    - ./data:/data
+    - ./keys:/keys:ro
     environment:
-      - RUST_LOG=info
-      - FLUX_CONFIG_PATH=/data/config.toml
+    - RUST_LOG=info
+    - FLUX_CONFIG_PATH=/data/config.toml
     command: ["--version"]
-    restart: unless-stopped
-
-  # Development container with source mounted
-  fluxencrypt-dev:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.dev
-    image: threatflux/fluxencrypt:dev
-    container_name: fluxencrypt-dev
-    volumes:
-      - ..:/workspace
-      - ./data:/data
-    working_dir: /workspace
-    environment:
-      - RUST_LOG=debug
-    command: ["tail", "-f", "/dev/null"]  # Keep container running
-    restart: unless-stopped
-
-volumes:
-  data:
-    driver: local
-  keys:
-    driver: local
+    restart: "no"

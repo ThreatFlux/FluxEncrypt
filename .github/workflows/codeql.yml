@@ -19,18 +19,21 @@ jobs:
     name: Analyze
     runs-on: ubuntu-latest
     permissions:
-      actions: read
+      actions: read  # Lets CodeQL read workflow run metadata.
       contents: read
-      security-events: write
+      security-events: write  # Uploads the analysis to code scanning.
 
     strategy:
       fail-fast: false
       matrix:
-        language: ['rust']
+        # actions analyzes the workflow files themselves.
+        language: ['rust', 'actions']
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      with:
+        persist-credentials: false
 
     - name: Initialize CodeQL
       uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2  # v4.38.2
@@ -39,11 +42,13 @@ jobs:
         queries: security-extended,security-and-quality
 
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # master
+      if: matrix.language == 'rust'
+      uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067  # v1
       with:
         toolchain: 1.99.0
 
     - name: Cache dependencies
+      if: matrix.language == 'rust'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
       with:
         path: |
@@ -53,6 +58,7 @@ jobs:
         key: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-rust-1.99.0-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Build
+      if: matrix.language == 'rust'
       run: cargo build --locked --workspace --all-features
 
     - name: Perform CodeQL Analysis
