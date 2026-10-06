@@ -505,6 +505,7 @@ jobs:
           # Short-lived trusted-publishing token; the auth action revokes it
           # in its post step. No long-lived registry secret is read.
         CARGO_REGISTRY_TOKEN: ${{ steps.crates-io-auth.outputs.token }}
+        CRATES: ${{ steps.packages.outputs.crates }}
         PENDING: ${{ steps.packages.outputs.pending }}
       shell: bash
       run: |
@@ -520,31 +521,39 @@ jobs:
             *) echo "${name:0:2}/${name:2:2}/${name}" ;;
           esac
         }
-        read -r -a pending <<< "${PENDING}"
-        for spec in "${pending[@]}"; do
-          package="${spec%@*}"
-          version="${spec#*@}"
-          cargo publish --locked --all-features -p "${package}"
-          # crates.io records a version before its background job rewrites the
-          # index, and Cargo's own wait for it can time out with only a
-          # warning. Publish the crates that depend on this one only once the
-          # sparse index lists it; a version it never lists fails the run.
-          url="https://index.crates.io/$(index_path "${package}")"
-          indexed=false
+        # crates.io records a version before its background job rewrites the
+        # index, and Cargo's own wait for it can time out with only a warning.
+        # Wait until the sparse index lists name@version, for up to 5 minutes.
+        wait_indexed() {
+          local spec="$1"
+          local url
+          url="https://index.crates.io/$(index_path "${spec%@*}")"
           for _ in $(seq 1 30); do
             if curl --fail --silent --show-error --location --header 'Cache-Control: no-cache' \
               --user-agent "${GITHUB_REPOSITORY}-release/${GITHUB_RUN_ID} (https://github.com/${GITHUB_REPOSITORY})" \
-              "${url}" | jq -e --arg version "${version}" 'select(.vers == $version)' > /dev/null; then
-              indexed=true
-              break
+              "${url}" | jq -e --arg version "${spec#*@}" 'select(.vers == $version)' > /dev/null; then
+              echo "${spec} is in the crates.io index"
+              return 0
             fi
             sleep 10
           done
-          if [[ "${indexed}" != "true" ]]; then
-            echo "::error::the crates.io index did not list ${spec} within 5 minutes of publishing it"
-            exit 1
+          echo "::error::the crates.io index did not list ${spec} within 5 minutes"
+          return 1
+        }
+        read -r -a crates <<< "${CRATES}"
+        read -r -a pending <<< "${PENDING}"
+        # A rerun can follow a publish whose index update has not landed yet,
+        # so the crates that are already published must be indexed first.
+        for spec in "${crates[@]}"; do
+          if [[ " ${PENDING} " != *" ${spec} "* ]]; then
+            wait_indexed "${spec}"
           fi
-          echo "${spec} is published and in the crates.io index"
+        done
+        # Publish in dependency order; each crate must be in the index before
+        # the crates that depend on it are published.
+        for spec in "${pending[@]}"; do
+          cargo publish --locked --all-features -p "${spec%@*}"
+          wait_indexed "${spec}"
         done
 
   docker:
