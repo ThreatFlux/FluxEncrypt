@@ -8,20 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- Updated the supported Rust toolchain and MSRV to 1.97.1.
-- Refreshed Rust dependencies and the locked dependency graph.
-- Updated Docker builder images to Rust 1.97.1.
-- Bumped every declared dependency to its latest stable release, raising each
-  requirement's minimum to that version so the declared floor matches the
-  lockfile. Requirements stay caret ranges, so patch and minor updates continue
-  to resolve normally; `Cargo.lock` remains the source of exact versions.
-- Documented why `pkcs8`, `sha2` and `rand` stay on 0.10/0.10/0.8: `rsa` 0.9.x is
-  the latest stable release line (0.10 is still a release candidate) and its
-  public API is built on `pkcs8` 0.10, `digest` 0.10 and `rand_core` 0.6.
-- Refreshed the lockfile again to the latest stable releases and raised the
-  `futures` requirement to 0.3.34. Everything else was already at its latest
-  stable version; `generic-array` stays on 0.14.7 because `crypto-common` 0.1.7
-  pins it exactly.
+- When CHANGELOG.md has no section for a release and the auto-release notes
+  list no features or fixes, `release.yml` now writes the commits since the
+  previous tag into the GitHub Release instead of leaving only a heading.
+
+## [0.7.8] - 2026-10-06
+
+No library, async or CLI code changed; the crates behave exactly as 0.7.7.
+
+### Changed
+- Dependabot no longer proposes semver-major updates of `pkcs8`, `sha2` and
+  `rand`. `rsa` 0.9.x needs `pkcs8` 0.10, `sha2` 0.10 and `rand` 0.8, so those
+  majors cannot build until the `rsa` 0.10 migration. Minor and patch updates
+  still arrive.
+
+## [0.7.7] - 2026-10-06
+
+### Changed
+- Pinned the build toolchain to Rust 1.99.0 with `rust-toolchain.toml` (the MSRV
+  stays 1.97.1), refreshed dependencies (including `thiserror` 2.0.21, `tokio`
+  1.53.2, `clap` 4.6.7, `log` 0.4.34 and `rand` 0.8.8) and updated the pinned
+  GitHub Actions.
 - Releases now come from tag-triggered `release.yml`: it builds the CLI for six
   targets, attaches CycloneDX SBOMs, and publishes `fluxencrypt`,
   `fluxencrypt-async` and `fluxencrypt-cli` to crates.io through trusted
@@ -35,9 +42,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   credentials, CodeQL also analyzes the workflows, and Dependabot covers Cargo,
   GitHub Actions and Docker.
 
+### Fixed
+- The Windows GNU target builds with the current MinGW toolchain again, and the
+  outstanding lint findings are resolved.
+
+## [0.7.6] - 2026-08-12
+
+### Changed
+- Bumped every declared dependency to its latest stable release, raising each
+  requirement's minimum to that version so the declared floor matches the
+  lockfile. Requirements stay caret ranges, so patch and minor updates continue
+  to resolve normally; `Cargo.lock` remains the source of exact versions.
+- Documented why `pkcs8`, `sha2` and `rand` stay on 0.10/0.10/0.8: `rsa` 0.9.x is
+  the latest stable release line (0.10 is still a release candidate) and its
+  public API is built on `pkcs8` 0.10, `digest` 0.10 and `rand_core` 0.6.
+- Refreshed the lockfile again to the latest stable releases and raised the
+  `futures` requirement to 0.3.34. Everything else was already at its latest
+  stable version; `generic-array` stays on 0.14.7 because `crypto-common` 0.1.7
+  pins it exactly.
+
 ### Removed
 - Dropped the unused `num-bigint` and `num-traits` dependencies; neither was
   referenced anywhere in the source.
+
+### Fixed
+- The RSA key component length test no longer fails about 1% of runs: it keeps
+  exact widths for the modulus and primes and bounds the private exponent and
+  CRT coefficient, whose encodings can drop a leading zero byte.
+
+## [0.7.5] - 2026-08-02
+
+### Changed
+- Updated the supported Rust toolchain and MSRV to 1.97.1.
+- Refreshed Rust dependencies and the locked dependency graph.
+- Updated Docker builder images to Rust 1.97.1.
 
 ## [0.5.0] - 2025-12-30
 

@@ -149,6 +149,19 @@ jobs:
           fi
         fi
         if [ "$FROM_CHANGELOG" != "true" ]; then
+          # Without a CHANGELOG.md section, list the commits since the previous
+          # release tag (checkout fetched all tags), leaving out release commits.
+          PREVIOUS_TAG="$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' HEAD^ 2>/dev/null || true)"
+          if [ -n "$PREVIOUS_TAG" ]; then
+            COMMITS="$(git log --no-merges --format='- %s (%h)' "${PREVIOUS_TAG}..HEAD" | grep -Ev '^- chore: release v[0-9]' || true)"
+            if [ -n "$COMMITS" ]; then
+              {
+                echo "### Changes since ${PREVIOUS_TAG}"
+                printf '%s\n' "$COMMITS"
+                echo ""
+              } >> release_notes.md
+            fi
+          fi
           echo "See CHANGELOG.md for details" >> release_notes.md
         fi
         echo "from_changelog=${FROM_CHANGELOG}" >> "$GITHUB_OUTPUT"
@@ -215,10 +228,17 @@ jobs:
           exit 1
         fi
 
-        if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-          # Auto-release already wrote notes from the commit history; only a
-          # CHANGELOG.md section for this version replaces them.
+        if EXISTING_NOTES="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body 2>/dev/null)"; then
+          # Auto-release already wrote notes from the commit history, but they
+          # only list features and fixes, so a release of other commits gets a
+          # heading and nothing else. A CHANGELOG.md section for this version
+          # replaces them. The commit list replaces them only when they hold
+          # nothing but headings and blank lines, so hand-written notes
+          # (prose or lists) survive a rerun.
           if [[ "$NOTES_FROM_CHANGELOG" == "true" ]]; then
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TITLE" --notes-file release_notes.md
+          elif ! grep -Evq '^[[:space:]]*(#.*)?$' <<< "$EXISTING_NOTES"; then
+            echo "The existing notes of ${TAG} hold only headings; replacing them with the commits since the previous tag"
             gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TITLE" --notes-file release_notes.md
           else
             echo "Keeping the existing notes of ${TAG}: CHANGELOG.md has no section for ${VERSION}"
