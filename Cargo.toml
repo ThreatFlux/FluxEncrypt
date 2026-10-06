@@ -61,7 +61,7 @@ hex = "0.4.3"
 # Development utilities
 tempfile = "3.27.0"
 # Held at 0.8 by rsa 0.9 (rand_core 0.6 / CryptoRngCore); see note above.
-rand = "0.8.8"
+rand = "0.9.5"
 
 [profile.release]
 lto = true
