@@ -307,11 +307,12 @@ jobs:
     # Every release tag run shares one publish lock (branch runs are already
     # serialized per branch by the workflow group), so the newest-release
     # check below and the tag writes cannot interleave with another release's
-    # publish. The job takes seconds, so a pending publish is not replaced in
-    # practice.
+    # publish. queue: max keeps every waiting publish (up to 100) instead of
+    # replacing a pending one, so no release loses its X.Y.Z tag.
     concurrency:
       group: docker-publish-${{ github.ref_type == 'tag' && 'release-tags' || github.ref }}
       cancel-in-progress: false
+      queue: max
     permissions:
       contents: read  # Lists the release tags of this repository.
       packages: write  # Points the image tags at the signed digest.

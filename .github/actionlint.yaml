@@ -1,0 +1,8 @@
+# actionlint configuration (https://github.com/rhysd/actionlint/blob/main/docs/config.md)
+paths:
+  .github/workflows/docker.yml:
+    ignore:
+    # actionlint 1.7.12 predates the documented `queue` key of `concurrency`
+    # (rhysd/actionlint#746); docker.yml's release publish lock uses
+    # `queue: max` so no waiting release publish is dropped.
+    - 'unexpected key "queue" for "concurrency" section'
