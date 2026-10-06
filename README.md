@@ -232,11 +232,13 @@ fluxencrypt-cli stream-encrypt --key ./keys/fluxencrypt_key.pub --input large-fi
 
 The CLI is also published to the GitHub Container Registry as
 `ghcr.io/threatflux/fluxencrypt` for `linux/amd64` and `linux/arm64`. Each
-release is tagged with its version (`0.7.9`, `0.7` and `0`), and `latest` is
-the newest release. `main` and the short commit SHA follow the `main` branch.
-Images published from `main` and from release tags are signed with keyless
-[cosign](https://github.com/sigstore/cosign). The image is distroless (no
-shell), runs as the non-root user 65532, and its entrypoint is the CLI:
+release is tagged with its version (for example `0.7.9`); `0.7`, `0` and
+`latest` point at the newest release of their line. `main` and the short
+commit SHA follow the `main` branch. A tag is applied only after every
+platform passed its smoke test, the image was scanned with Trivy and it was
+signed with keyless [cosign](https://github.com/sigstore/cosign). The image is
+distroless (no shell), runs as the non-root user 65532, and its entrypoint is
+the CLI:
 
 ```bash
 # Verify the signature of a release image

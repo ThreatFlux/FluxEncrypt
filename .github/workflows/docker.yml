@@ -1,14 +1,16 @@
 name: Docker
 
 # Builds the distroless fluxencrypt-cli image from the root Dockerfile for
-# linux/amd64 and linux/arm64, publishes it to ghcr.io/threatflux/fluxencrypt
-# and signs it with keyless cosign. Pull requests build and test linux/amd64
-# only and push nothing.
+# linux/amd64 and linux/arm64 and publishes it to ghcr.io/threatflux/fluxencrypt.
+# The image is pushed by digest only; it gets its tags after every platform
+# passed the smoke test, Trivy scanned it and keyless cosign signed it, so a
+# tag never points at an untested or unsigned image. Pull requests build and
+# test linux/amd64 only and push nothing.
 on:
   push:
     branches: [main]
     tags:
-    - "v*"
+    - "v*.*.*"
   pull_request:
     branches: [main]
     paths:
@@ -32,12 +34,12 @@ permissions:
   contents: read
 
 # Each mutable image tag has one kind of publisher. Branch runs (push,
-# schedule or dispatch) publish the branch tag (main) and the short commit SHA;
-# tag runs publish the version tags and latest. Runs for the same branch share
-# a group, so an older commit never finishes after a newer one and moves main
-# back; a newer pending run replaces an older pending one. Each release tag
-# gets its own group, so a release build is never cancelled. Pull requests
-# push nothing and get a group per run.
+# schedule or dispatch) publish main and the short commit SHA; release tag
+# runs publish the version tags and latest (see the publish job). Runs for the
+# same branch share a group, so an older commit never finishes after a newer
+# one and moves main back; a newer pending run replaces an older pending one.
+# Each release tag gets its own group, so a release build is never cancelled.
+# Pull requests push nothing and get a group per run.
 concurrency:
   group: docker-${{ github.event_name == 'pull_request' && github.run_id || github.ref }}
   cancel-in-progress: false
@@ -89,16 +91,13 @@ jobs:
       uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0
       with:
         images: ${{ env.REGISTRY }}/${{ steps.lowercase.outputs.image_name }}
-        # Branch runs: the branch name and the short commit SHA. Release tag
-        # runs: X.Y.Z, X.Y and X, plus latest (added by the default
-        # flavor latest=auto for stable versions only).
+        # Only the labels are used here (the version label comes from the
+        # first tag); the publish job applies the registry tags.
         tags: |
+          type=semver,pattern={{version}}
           type=ref,event=branch
           type=ref,event=pr
-          type=semver,pattern={{version}}
-          type=semver,pattern={{major}}.{{minor}}
-          type=semver,pattern={{major}}
-          type=sha,prefix=,enable=${{ github.ref_type != 'tag' }}
+        flavor: latest=false
         labels: |
           org.opencontainers.image.title=FluxEncrypt
           org.opencontainers.image.description=FluxEncrypt hybrid RSA and AES-GCM encryption command-line interface
@@ -118,17 +117,16 @@ jobs:
         build-args: |
           VERSION=${{ github.ref_name }}
 
-      # Tag runs publish release images, so they build without the GitHub
-      # Actions cache that other runs write.
-    - name: Build and push image
+      # Pushed by digest only, without tags. Tag runs publish release images,
+      # so they build without the GitHub Actions cache that other runs write.
+    - name: Build and push image by digest
       if: github.event_name != 'pull_request'
       id: build
       uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
       with:
         context: .
         platforms: ${{ env.PLATFORMS }}
-        push: true
-        tags: ${{ steps.meta.outputs.tags }}
+        outputs: type=image,name=${{ env.REGISTRY }}/${{ steps.lowercase.outputs.image_name }},push-by-digest=true,name-canonical=true,push=true
         labels: ${{ steps.meta.outputs.labels }}
         cache-from: ${{ github.ref_type != 'tag' && 'type=gha' || '' }}
         cache-to: ${{ github.ref_type != 'tag' && 'type=gha,mode=max' || '' }}
@@ -263,12 +261,117 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Signs the multi-platform index by digest, so every tag that points at
-      # it (version, SHA, latest) verifies.
+      # Signs the multi-platform index by digest, so every tag that the
+      # publish job later points at it (version, SHA, latest) verifies.
     - name: Sign container image
       env:
         IMAGE: ${{ env.REGISTRY }}/${{ needs.build.outputs.image_name }}@${{ needs.build.outputs.digest }}
       run: cosign sign --yes "${IMAGE}"
+
+  publish:
+    name: Publish Image Tags
+    # Runs only after the build (with its smoke tests), the scan and the
+    # signature succeeded, so only main and release tags are ever tagged.
+    needs: [build, scan, sign]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read  # Lists the release tags of this repository.
+      packages: write  # Points the image tags at the signed digest.
+    steps:
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
+
+    - name: Log in to registry
+      uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Branch runs: the branch name (main) and the short commit SHA. Release
+      # tag vX.Y.Z: X.Y.Z, plus X.Y, X and latest only when X.Y.Z is the
+      # newest stable release of that line. Comparing against the repository's
+      # tags means a release that finishes after a newer one (or a fix for an
+      # older line) never moves those tags back. A pre-release gets only its
+      # own version tag.
+    - name: Resolve image tags
+      id: tags
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        set -euo pipefail
+        tags=()
+        if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+          if ! [[ "${GITHUB_REF_NAME}" =~ ^v(([0-9]+)\.([0-9]+)\.[0-9]+)(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::${GITHUB_REF_NAME} is not a vX.Y.Z release tag"
+            exit 1
+          fi
+          version="${GITHUB_REF_NAME#v}"
+          major="${BASH_REMATCH[2]}"
+          minor="${BASH_REMATCH[3]}"
+          tags+=("${version}")
+          if [[ -z "${BASH_REMATCH[4]}" ]]; then
+            # A failed lookup fails the step rather than silently leaving
+            # X.Y, X and latest where they are.
+            refs="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v" \
+              --jq '.[].ref | ltrimstr("refs/tags/v")')"
+            releases="$(printf '%s\n' "${refs}" | { grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' || true; } | sort -V -r)"
+            # newest_release PREFIX prints the newest stable release whose
+            # version is PREFIX followed by a dot (an empty PREFIX matches all).
+            newest_release() {
+              local prefix="$1" release
+              while IFS= read -r release; do
+                if [[ -z "${prefix}" || "${release}" == "${prefix}."* ]]; then
+                  echo "${release}"
+                  return
+                fi
+              done <<< "${releases}"
+            }
+            if [[ "$(newest_release "${major}.${minor}")" == "${version}" ]]; then
+              tags+=("${major}.${minor}")
+            fi
+            if [[ "$(newest_release "${major}")" == "${version}" ]]; then
+              tags+=("${major}")
+            fi
+            if [[ "$(newest_release "")" == "${version}" ]]; then
+              tags+=("latest")
+            fi
+          fi
+        else
+          tags+=("${GITHUB_REF_NAME}" "${GITHUB_SHA::7}")
+        fi
+        echo "Image tags: ${tags[*]}"
+        echo "tags=${tags[*]}" >> "$GITHUB_OUTPUT"
+
+      # With one image index as its only source, imagetools copies the index
+      # unchanged, so each tag resolves to the signed digest; the loop checks it.
+    - name: Tag the signed digest
+      env:
+        IMAGE: ${{ env.REGISTRY }}/${{ needs.build.outputs.image_name }}
+        DIGEST: ${{ needs.build.outputs.digest }}
+        IMAGE_TAGS: ${{ steps.tags.outputs.tags }}
+      run: |
+        set -euo pipefail
+        read -r -a tags <<< "${IMAGE_TAGS}"
+        tag_args=()
+        for tag in "${tags[@]}"; do
+          tag_args+=(--tag "${IMAGE}:${tag}")
+        done
+        docker buildx imagetools create "${tag_args[@]}" "${IMAGE}@${DIGEST}"
+        {
+          echo "### Published ${IMAGE}"
+          echo
+          echo "Signed digest: \`${DIGEST}\`"
+          echo
+        } >> "$GITHUB_STEP_SUMMARY"
+        for tag in "${tags[@]}"; do
+          resolved="$(docker buildx imagetools inspect "${IMAGE}:${tag}" --format '{{json .Manifest}}' | jq -r .digest)"
+          if [[ "${resolved}" != "${DIGEST}" ]]; then
+            echo "::error::${IMAGE}:${tag} resolves to ${resolved}, not the signed digest ${DIGEST}"
+            exit 1
+          fi
+          echo "- \`${tag}\`" >> "$GITHUB_STEP_SUMMARY"
+        done
 
   sbom:
     name: Generate SBOM
