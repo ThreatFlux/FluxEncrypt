@@ -1,0 +1,477 @@
+name: Docker
+
+# Builds the distroless fluxencrypt-cli image from the root Dockerfile for
+# linux/amd64 and linux/arm64 and publishes it to ghcr.io/threatflux/fluxencrypt.
+# The image is pushed by digest only; it gets its tags after every platform
+# passed the smoke test, Trivy scanned it and keyless cosign signed it, so a
+# tag never points at an untested or unsigned image. Pull requests build and
+# test linux/amd64 only and push nothing.
+on:
+  push:
+    branches: [main]
+    tags:
+    - "v*.*.*"
+  pull_request:
+    branches: [main]
+    paths:
+    - ".github/workflows/docker.yml"
+    - "Dockerfile"
+    - ".dockerignore"
+    - "Cargo.toml"
+    - "Cargo.lock"
+    - "rust-toolchain.toml"
+    - "fluxencrypt/**"
+    - "fluxencrypt-async/**"
+    - "fluxencrypt-cli/**"
+    - "scripts/docker-smoke.sh"
+  schedule:
+  - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+# Read-only by default; each job requests the registry, SARIF or OIDC scope it
+# needs.
+permissions:
+  contents: read
+
+# Each mutable image tag has one kind of publisher. Branch runs (push,
+# schedule or dispatch) publish main and the short commit SHA; release tag
+# runs publish the version tags and latest (see the publish job). Runs for the
+# same branch share a group, so an older commit never finishes after a newer
+# one and moves main back; a newer pending run replaces an older pending one.
+# Each release tag gets its own group, so a release build is never cancelled.
+# Pull requests push nothing and get a group per run.
+concurrency:
+  group: docker-${{ github.event_name == 'pull_request' && github.run_id || github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  PLATFORMS: linux/amd64,linux/arm64
+
+jobs:
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write  # Pushes the image to GHCR.
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      image_name: ${{ steps.lowercase.outputs.image_name }}
+      platforms: ${{ steps.platforms.outputs.json }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      with:
+        persist-credentials: false
+
+    - name: Lowercase image name
+      id: lowercase
+      run: echo "image_name=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      # The platforms this run builds, as JSON for the scan and SBOM matrices:
+      # pull requests build linux/amd64 only.
+    - name: Select platforms
+      id: platforms
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+      run: |
+        set -euo pipefail
+        platforms="${PLATFORMS}"
+        if [[ "${EVENT_NAME}" == "pull_request" ]]; then
+          platforms="linux/amd64"
+        fi
+        echo "json=$(jq -cn --arg platforms "${platforms}" '$platforms | split(",")')" >> "$GITHUB_OUTPUT"
+
+      # The arm64 image is compiled under QEMU on the amd64 runner; pull
+      # requests build linux/amd64 only and do not need it.
+    - name: Set up QEMU
+      if: github.event_name != 'pull_request'
+      uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1  # v4.4.0
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
+
+    - name: Log in to GitHub Container Registry
+      if: github.event_name != 'pull_request'
+      uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract image metadata
+      id: meta
+      uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0
+      with:
+        images: ${{ env.REGISTRY }}/${{ steps.lowercase.outputs.image_name }}
+        # Only the labels are used here (the version label comes from the
+        # first tag); the publish job applies the registry tags.
+        tags: |
+          type=semver,pattern={{version}}
+          type=ref,event=branch
+          type=ref,event=pr
+        flavor: latest=false
+        labels: |
+          org.opencontainers.image.title=FluxEncrypt
+          org.opencontainers.image.description=FluxEncrypt hybrid RSA and AES-GCM encryption command-line interface
+          org.opencontainers.image.vendor=ThreatFlux
+
+    - name: Build and export (PRs)
+      if: github.event_name == 'pull_request'
+      uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
+      with:
+        context: .
+        platforms: linux/amd64
+        tags: ${{ steps.lowercase.outputs.image_name }}:scan
+        labels: ${{ steps.meta.outputs.labels }}
+        outputs: type=docker,dest=${{ runner.temp }}/image.tar
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: |
+          VERSION=${{ github.ref_name }}
+
+      # Pushed by digest only, without tags. Tag runs publish release images,
+      # so they build without the GitHub Actions cache that other runs write.
+    - name: Build and push image by digest
+      if: github.event_name != 'pull_request'
+      id: build
+      uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
+      with:
+        context: .
+        platforms: ${{ env.PLATFORMS }}
+        outputs: type=image,name=${{ env.REGISTRY }}/${{ steps.lowercase.outputs.image_name }},push-by-digest=true,name-canonical=true,push=true
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: ${{ github.ref_type != 'tag' && 'type=gha' || '' }}
+        cache-to: ${{ github.ref_type != 'tag' && 'type=gha,mode=max' || '' }}
+        build-args: |
+          VERSION=${{ github.ref_name }}
+
+      # The runtime image is distroless (no shell), so the CLI itself is the
+      # smoke test: scripts/docker-smoke.sh generates keys and round-trips a
+      # file, and the image must run as the distroless nonroot user. Pull
+      # requests test the exported amd64 image; pushes test every pushed
+      # platform by digest (QEMU runs the non-native one).
+    - name: Smoke test image
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        PR_IMAGE: ${{ steps.lowercase.outputs.image_name }}:scan
+        PR_IMAGE_TAR: ${{ runner.temp }}/image.tar
+        PUSHED_IMAGE: ${{ env.REGISTRY }}/${{ steps.lowercase.outputs.image_name }}@${{ steps.build.outputs.digest }}
+      run: |
+        set -euo pipefail
+        # smoke_test PLATFORM IMAGE: runs the roundtrip smoke test and
+        # --help on one platform of IMAGE and checks that it runs as the
+        # distroless nonroot user.
+        smoke_test() {
+          local platform="$1" image="$2" container user
+          echo "::group::Smoke test ${platform}"
+          SMOKE_PLATFORM="${platform}" ./scripts/docker-smoke.sh "${image}"
+          docker run --rm --platform "${platform}" "${image}" --help > /dev/null
+          # Read USER from a container of this platform: inspecting a
+          # multi-platform reference can report another platform's config.
+          container="$(docker create --platform "${platform}" "${image}")"
+          user="$(docker container inspect --format '{{.Config.User}}' "${container}")"
+          docker rm "${container}" > /dev/null
+          if [[ "${user}" != "65532:65532" ]]; then
+            echo "::error::${image} (${platform}) runs as '${user}', expected the distroless nonroot user 65532:65532"
+            exit 1
+          fi
+          echo "Runs as USER ${user}"
+          echo "::endgroup::"
+        }
+        if [[ "${EVENT_NAME}" == "pull_request" ]]; then
+          docker load -i "${PR_IMAGE_TAR}"
+          smoke_test linux/amd64 "${PR_IMAGE}"
+        else
+          IFS=',' read -ra platforms <<< "${PLATFORMS}"
+          for platform in "${platforms[@]}"; do
+            smoke_test "${platform}" "${PUSHED_IMAGE}"
+            # The runner's classic image store keeps one platform per
+            # reference and refuses to pull another platform over the same
+            # index digest ("cannot overwrite digest"), so drop this one
+            # before the next platform is pulled.
+            docker image rm "${PUSHED_IMAGE}" > /dev/null
+          done
+        fi
+
+    - name: Upload image artifact
+      if: github.event_name == 'pull_request'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+      with:
+        name: docker-image
+        path: ${{ runner.temp }}/image.tar
+        if-no-files-found: error
+        retention-days: 1
+
+  # One Trivy scan per built platform; every one must succeed before the
+  # image is signed and tagged.
+  scan:
+    name: Security Scan (${{ matrix.platform }})
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJSON(needs.build.outputs.platforms) }}
+    permissions:
+      contents: read
+      packages: read  # Pulls the pushed image from GHCR.
+      security-events: write  # Uploads the Trivy SARIF to code scanning.
+    steps:
+    - name: Download image (PRs)
+      if: github.event_name == 'pull_request'
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+      with:
+        name: docker-image
+        path: ${{ runner.temp }}
+
+    - name: Load image (PRs)
+      if: github.event_name == 'pull_request'
+      run: docker load -i "${RUNNER_TEMP}/image.tar"
+
+    - name: Log in to registry
+      if: github.event_name != 'pull_request'
+      uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Name the code scanning category
+      id: category
+      env:
+        PLATFORM: ${{ matrix.platform }}
+      run: echo "value=docker-image-${PLATFORM//\//-}" >> "$GITHUB_OUTPUT"
+
+    - name: Run Trivy scanner
+      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+      env:
+        # Trivy otherwise picks linux/amd64 from a multi-platform index. Pushed
+        # images are read from the registry for this platform; the pull
+        # request image comes from the local Docker engine.
+        TRIVY_PLATFORM: ${{ matrix.platform }}
+        TRIVY_IMAGE_SRC: ${{ github.event_name == 'pull_request' && 'docker' || 'remote' }}
+      with:
+        image-ref: ${{ github.event_name == 'pull_request' && format('{0}:scan', needs.build.outputs.image_name) || format('{0}/{1}@{2}', env.REGISTRY, needs.build.outputs.image_name, needs.build.outputs.digest) }}
+        format: sarif
+        output: trivy-results.sarif
+        severity: CRITICAL,HIGH
+        vuln-type: os,library
+        # Findings are reported to code scanning and do not fail the job
+        # (exit-code 0), but a scanner failure does, so an image that was not
+        # scanned is never signed.
+        exit-code: "0"
+
+    - name: Upload Trivy results
+      if: always() && hashFiles('trivy-results.sarif') != ''
+      uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2  # v4.38.2
+      with:
+        sarif_file: trivy-results.sarif
+        category: ${{ steps.category.outputs.value }}
+
+  sign:
+    name: Sign Container
+    needs: [build, scan]
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    permissions:
+      contents: read
+      packages: write  # Pushes the signature next to the image.
+      id-token: write  # Keyless signing with the workflow's OIDC identity.
+    steps:
+    - name: Install cosign
+      uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
+
+    - name: Log in to registry
+      uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Signs the multi-platform index by digest, so every tag that the
+      # publish job later points at it (version, SHA, latest) verifies.
+    - name: Sign container image
+      env:
+        IMAGE: ${{ env.REGISTRY }}/${{ needs.build.outputs.image_name }}@${{ needs.build.outputs.digest }}
+      run: cosign sign --yes "${IMAGE}"
+
+  publish:
+    name: Publish Image Tags
+    # Runs only after the build (with its smoke tests), the scan and the
+    # signature succeeded, so only main and release tags are ever tagged.
+    needs: [build, scan, sign]
+    runs-on: ubuntu-latest
+    # Every release tag run shares one publish lock (branch runs are already
+    # serialized per branch by the workflow group), so the newest-release
+    # check below and the tag writes cannot interleave with another release's
+    # publish. queue: max keeps every waiting publish (up to 100) instead of
+    # replacing a pending one, so no release loses its X.Y.Z tag.
+    concurrency:
+      group: docker-publish-${{ github.ref_type == 'tag' && 'release-tags' || github.ref }}
+      cancel-in-progress: false
+      queue: max
+    permissions:
+      contents: read  # Lists the release tags of this repository.
+      packages: write  # Points the image tags at the signed digest.
+    steps:
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
+
+    - name: Log in to registry
+      uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Branch runs: the short commit SHA, plus the branch name (main) while
+      # the commit is still the branch head. Release
+      # tag vX.Y.Z: X.Y.Z, plus X.Y, X and latest only when X.Y.Z is the
+      # newest stable release of that line. Comparing against the repository's
+      # tags means a release that finishes after a newer one (or a fix for an
+      # older line) never moves those tags back. A pre-release gets only its
+      # own version tag.
+    - name: Resolve image tags
+      id: tags
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        set -euo pipefail
+        tags=()
+        if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+          if ! [[ "${GITHUB_REF_NAME}" =~ ^v(([0-9]+)\.([0-9]+)\.[0-9]+)(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::${GITHUB_REF_NAME} is not a vX.Y.Z release tag"
+            exit 1
+          fi
+          version="${GITHUB_REF_NAME#v}"
+          major="${BASH_REMATCH[2]}"
+          minor="${BASH_REMATCH[3]}"
+          tags+=("${version}")
+          if [[ -z "${BASH_REMATCH[4]}" ]]; then
+            # A failed lookup fails the step rather than silently leaving
+            # X.Y, X and latest where they are.
+            refs="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v" \
+              --jq '.[].ref | ltrimstr("refs/tags/v")')"
+            releases="$(printf '%s\n' "${refs}" | { grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' || true; } | sort -V -r)"
+            # newest_release PREFIX prints the newest stable release whose
+            # version is PREFIX followed by a dot (an empty PREFIX matches all).
+            newest_release() {
+              local prefix="$1" release
+              while IFS= read -r release; do
+                if [[ -z "${prefix}" || "${release}" == "${prefix}."* ]]; then
+                  echo "${release}"
+                  return
+                fi
+              done <<< "${releases}"
+            }
+            if [[ "$(newest_release "${major}.${minor}")" == "${version}" ]]; then
+              tags+=("${major}.${minor}")
+            fi
+            if [[ "$(newest_release "${major}")" == "${version}" ]]; then
+              tags+=("${major}")
+            fi
+            if [[ "$(newest_release "")" == "${version}" ]]; then
+              tags+=("latest")
+            fi
+          fi
+        else
+          tags+=("${GITHUB_SHA::7}")
+          # Move the branch tag only while this commit is still the branch
+          # head: the concurrency group serializes runs but does not promise
+          # they start in commit order, and a newer commit's run moves it.
+          head="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${GITHUB_REF_NAME}" --jq .object.sha)"
+          if [[ "${head}" == "${GITHUB_SHA}" ]]; then
+            tags+=("${GITHUB_REF_NAME}")
+          else
+            echo "::notice::${GITHUB_REF_NAME} is now at ${head}, not ${GITHUB_SHA}; leaving the ${GITHUB_REF_NAME} tag to that commit's run"
+          fi
+        fi
+        echo "Image tags: ${tags[*]}"
+        echo "tags=${tags[*]}" >> "$GITHUB_OUTPUT"
+
+      # With one image index as its only source, imagetools copies the index
+      # unchanged, so each tag resolves to the signed digest; the loop checks it.
+    - name: Tag the signed digest
+      env:
+        IMAGE: ${{ env.REGISTRY }}/${{ needs.build.outputs.image_name }}
+        DIGEST: ${{ needs.build.outputs.digest }}
+        IMAGE_TAGS: ${{ steps.tags.outputs.tags }}
+      run: |
+        set -euo pipefail
+        read -r -a tags <<< "${IMAGE_TAGS}"
+        tag_args=()
+        for tag in "${tags[@]}"; do
+          tag_args+=(--tag "${IMAGE}:${tag}")
+        done
+        docker buildx imagetools create "${tag_args[@]}" "${IMAGE}@${DIGEST}"
+        {
+          echo "### Published ${IMAGE}"
+          echo
+          echo "Signed digest: \`${DIGEST}\`"
+          echo
+        } >> "$GITHUB_STEP_SUMMARY"
+        for tag in "${tags[@]}"; do
+          resolved="$(docker buildx imagetools inspect "${IMAGE}:${tag}" --format '{{json .Manifest}}' | jq -r .digest)"
+          if [[ "${resolved}" != "${DIGEST}" ]]; then
+            echo "::error::${IMAGE}:${tag} resolves to ${resolved}, not the signed digest ${DIGEST}"
+            exit 1
+          fi
+          echo "- \`${tag}\`" >> "$GITHUB_STEP_SUMMARY"
+        done
+
+  # One SPDX SBOM per pushed platform: Syft otherwise catalogs only the
+  # runner's platform of a multi-platform index.
+  sbom:
+    name: Generate SBOM (${{ matrix.platform }})
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJSON(needs.build.outputs.platforms) }}
+    # Read-only: keeps the SBOMs as workflow artifacts.
+    permissions:
+      contents: read
+      packages: read  # Pulls the pushed image from GHCR.
+    steps:
+    - name: Log in to registry
+      uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Install Syft
+      id: syft
+      uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c  # v0.24.3
+
+    - name: Generate SBOM
+      id: sbom
+      env:
+        SYFT: ${{ steps.syft.outputs.cmd }}
+        IMAGE: ${{ env.REGISTRY }}/${{ needs.build.outputs.image_name }}@${{ needs.build.outputs.digest }}
+        PLATFORM: ${{ matrix.platform }}
+      run: |
+        set -euo pipefail
+        name="sbom-${PLATFORM//\//-}"
+        "${SYFT}" scan "registry:${IMAGE}" --platform "${PLATFORM}" \
+          --output "spdx-json=${RUNNER_TEMP}/${name}.spdx.json" \
+          --output "syft-json=${RUNNER_TEMP}/${name}.syft.json"
+        # The SBOM must describe the requested platform, not the runner's.
+        jq -e --arg os "${PLATFORM%%/*}" --arg arch "${PLATFORM#*/}" \
+          '.source.metadata.os == $os and .source.metadata.architecture == $arch' \
+          "${RUNNER_TEMP}/${name}.syft.json" > /dev/null
+        jq -e '.packages | length > 0' "${RUNNER_TEMP}/${name}.spdx.json" > /dev/null
+        echo "name=${name}.spdx.json" >> "$GITHUB_OUTPUT"
+        echo "path=${RUNNER_TEMP}/${name}.spdx.json" >> "$GITHUB_OUTPUT"
+
+    - name: Upload SBOM
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+      with:
+        name: ${{ steps.sbom.outputs.name }}
+        path: ${{ steps.sbom.outputs.path }}
+        if-no-files-found: error

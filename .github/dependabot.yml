@@ -1,4 +1,7 @@
 version: 2
+# No `labels` keys: Dependabot then applies its default labels (dependencies
+# plus the ecosystem, such as rust or github_actions) and creates them in the
+# repository when they are missing. Custom labels must already exist.
 updates:
 - package-ecosystem: cargo
   directory: /
@@ -15,9 +18,6 @@ updates:
       update-types:
       - minor
       - patch
-  labels:
-  - dependencies
-  - rust
   commit-message:
     prefix: "chore(deps)"
   # rsa 0.9.x, the latest stable RSA line, builds its public API on pkcs8 0.10,
@@ -44,9 +44,6 @@ updates:
     github-actions:
       patterns:
       - "*"
-  labels:
-  - dependencies
-  - github-actions
   commit-message:
     prefix: "chore(ci)"
 
@@ -61,8 +58,5 @@ updates:
     time: "06:00"
     timezone: UTC
   open-pull-requests-limit: 3
-  labels:
-  - dependencies
-  - docker
   commit-message:
     prefix: "chore(docker)"

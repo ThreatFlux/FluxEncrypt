@@ -579,8 +579,8 @@ jobs:
   docker:
     name: Build Docker Image (dry run)
     needs: prepare
-    # FluxEncrypt does not publish container images; a dry run proves the
-    # release commit's Dockerfile still builds and runs.
+    # docker.yml publishes and signs the image when the release tag is pushed;
+    # a dry run proves the release commit's Dockerfile still builds and runs.
     if: github.event_name == 'workflow_dispatch' && inputs.dry_run
     runs-on: ubuntu-latest
     permissions:
