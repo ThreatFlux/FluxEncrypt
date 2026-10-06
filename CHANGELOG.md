@@ -7,10 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.9] - 2026-10-06
+
+No library, async or CLI code changed; the crates behave exactly as 0.7.8.
+
+### Added
+- The CLI container image is now published to
+  `ghcr.io/threatflux/fluxencrypt` for `linux/amd64` and `linux/arm64` and
+  signed with keyless cosign. The new `docker.yml` workflow builds the
+  distroless image from the root `Dockerfile` on every push to `main` and every
+  release tag, smoke-tests each platform (key generation and an
+  encrypt/decrypt roundtrip), scans it with Trivy and attaches an SPDX SBOM to
+  the run. Pull requests build and test `linux/amd64` without pushing.
+
 ### Changed
 - When CHANGELOG.md has no section for a release and the auto-release notes
   list no features or fixes, `release.yml` now writes the commits since the
   previous tag into the GitHub Release instead of leaving only a heading.
+- Dependabot pull requests now carry its default labels (`dependencies` plus
+  the ecosystem), which it creates when missing, instead of custom labels that
+  did not exist in the repository.
 
 ## [0.7.8] - 2026-10-06
 

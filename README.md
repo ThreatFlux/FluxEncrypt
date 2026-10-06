@@ -228,6 +228,28 @@ fluxencrypt-cli batch-encrypt --key ./keys/fluxencrypt_key.pub --input-dir ./doc
 fluxencrypt-cli stream-encrypt --key ./keys/fluxencrypt_key.pub --input large-file.bin --output large-file.bin.enc
 ```
 
+### Container Image
+
+The CLI is also published to the GitHub Container Registry as
+`ghcr.io/threatflux/fluxencrypt` for `linux/amd64` and `linux/arm64`. Each
+release is tagged with its version (`0.7.9`, `0.7` and `0`); `latest` and
+`main` follow the `main` branch. Every image is signed with keyless
+[cosign](https://github.com/sigstore/cosign). The image is distroless (no
+shell), runs as the non-root user 65532, and its entrypoint is the CLI:
+
+```bash
+# Verify the signature of a release image
+cosign verify ghcr.io/threatflux/fluxencrypt:0.7 \
+  --certificate-identity-regexp '^https://github\.com/ThreatFlux/FluxEncrypt/\.github/workflows/docker\.yml@refs/tags/v' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+# Generate keys and encrypt a file in the current directory
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -w /work \
+  ghcr.io/threatflux/fluxencrypt:0.7 keygen --output-dir ./keys
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -w /work \
+  ghcr.io/threatflux/fluxencrypt:0.7 encrypt --key ./keys/fluxencrypt_key.pub --input document.pdf --output document.pdf.enc
+```
+
 ## Configuration
 
 FluxEncrypt provides flexible configuration options:
