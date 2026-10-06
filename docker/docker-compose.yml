@@ -1,5 +1,12 @@
 # Run from the docker/ directory, e.g. `docker compose run --rm fluxencrypt --help`.
 # The CLI exits after each command, so the services are not restarted.
+#
+# ./data is bind-mounted over the image's /data working directory, where keygen
+# writes by default. Run as your own user so the mounted directory is writable
+# and the generated files are yours:
+#   FLUXENCRYPT_UID=$(id -u) FLUXENCRYPT_GID=$(id -g) docker compose run --rm fluxencrypt keygen
+# Without them the images' own non-root users are used (65532 on distroless,
+# 1000 on Alpine), which then need write access to ./data.
 services:
   fluxencrypt:
     build:
@@ -7,6 +14,7 @@ services:
       dockerfile: docker/Dockerfile
     image: threatflux/fluxencrypt:latest
     container_name: fluxencrypt
+    user: "${FLUXENCRYPT_UID:-65532}:${FLUXENCRYPT_GID:-65532}"
     volumes:
     - ./data:/data
     - ./keys:/keys:ro
@@ -22,6 +30,7 @@ services:
       dockerfile: docker/Dockerfile.alpine
     image: threatflux/fluxencrypt:alpine
     container_name: fluxencrypt-alpine
+    user: "${FLUXENCRYPT_UID:-1000}:${FLUXENCRYPT_GID:-1000}"
     volumes:
     - ./data:/data
     - ./keys:/keys:ro

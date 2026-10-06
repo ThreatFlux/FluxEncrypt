@@ -412,11 +412,22 @@ jobs:
 
   publish:
     name: Publish to crates.io
-    needs: [prepare, build]
+    # crates.io versions are permanent, so publish only after every build, the
+    # SBOMs and (on a real run) the GitHub Release assets have succeeded.
+    # upload-assets is skipped on a dry run, hence !cancelled() and the
+    # explicit results.
+    needs: [prepare, build, sbom, upload-assets]
     runs-on: ubuntu-latest
     # Real publishes skip pre-release versions; a dry run always runs
     # `cargo publish --dry-run`.
-    if: (github.event_name == 'workflow_dispatch' && inputs.dry_run) || !contains(needs.prepare.outputs.version, '-')
+    if: >-
+      !cancelled() &&
+      needs.prepare.result == 'success' &&
+      needs.build.result == 'success' &&
+      needs.sbom.result == 'success' &&
+      (needs.upload-assets.result == 'success' ||
+      (needs.upload-assets.result == 'skipped' && github.event_name == 'workflow_dispatch' && inputs.dry_run)) &&
+      ((github.event_name == 'workflow_dispatch' && inputs.dry_run) || !contains(needs.prepare.outputs.version, '-'))
     # crates.io trusted publishing trusts this workflow file (release.yml) in the
     # crates-io environment. A dry run gets an empty environment name, which runs
     # the job without an environment, so it records no deployment.
