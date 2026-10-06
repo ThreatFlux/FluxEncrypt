@@ -301,6 +301,14 @@ jobs:
     # signature succeeded, so only main and release tags are ever tagged.
     needs: [build, scan, sign]
     runs-on: ubuntu-latest
+    # Every release tag run shares one publish lock (branch runs are already
+    # serialized per branch by the workflow group), so the newest-release
+    # check below and the tag writes cannot interleave with another release's
+    # publish. The job takes seconds, so a pending publish is not replaced in
+    # practice.
+    concurrency:
+      group: docker-publish-${{ github.ref_type == 'tag' && 'release-tags' || github.ref }}
+      cancel-in-progress: false
     permissions:
       contents: read  # Lists the release tags of this repository.
       packages: write  # Points the image tags at the signed digest.
