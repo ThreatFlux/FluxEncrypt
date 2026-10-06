@@ -18,6 +18,10 @@ fi
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
+# run ARGS...
+#   Runs the image's CLI with ARGS as the invoking user, with the host work
+#   directory mounted at /work as the working directory, no network, and the
+#   SMOKE_PLATFORM platform when it is set.
 run() {
     docker run --rm ${platform_args[@]+"${platform_args[@]}"} --network none --user "$(id -u):$(id -g)" \
         --volume "$work:/work" --workdir /work "$image" "$@"

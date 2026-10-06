@@ -161,6 +161,9 @@ jobs:
         PUSHED_IMAGE: ${{ env.REGISTRY }}/${{ steps.lowercase.outputs.image_name }}@${{ steps.build.outputs.digest }}
       run: |
         set -euo pipefail
+        # smoke_test PLATFORM IMAGE: runs the roundtrip smoke test and
+        # --help on one platform of IMAGE and checks that it runs as the
+        # distroless nonroot user.
         smoke_test() {
           local platform="$1" image="$2" container user
           echo "::group::Smoke test ${platform}"
