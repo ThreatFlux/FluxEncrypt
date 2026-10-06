@@ -20,6 +20,17 @@ updates:
   - rust
   commit-message:
     prefix: "chore(deps)"
+  # rsa 0.9.x, the latest stable RSA line, builds its public API on pkcs8 0.10,
+  # digest/sha2 0.10 and rand_core 0.6 (rand 0.8), so their next majors cannot
+  # build until the rsa 0.10 migration (see docs/MODERNIZATION.md). Minor and
+  # patch updates still arrive.
+  ignore:
+  - dependency-name: pkcs8
+    update-types: ["version-update:semver-major"]
+  - dependency-name: sha2
+    update-types: ["version-update:semver-major"]
+  - dependency-name: rand
+    update-types: ["version-update:semver-major"]
 
 - package-ecosystem: github-actions
   directory: /
