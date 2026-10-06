@@ -315,7 +315,8 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Branch runs: the branch name (main) and the short commit SHA. Release
+      # Branch runs: the short commit SHA, plus the branch name (main) while
+      # the commit is still the branch head. Release
       # tag vX.Y.Z: X.Y.Z, plus X.Y, X and latest only when X.Y.Z is the
       # newest stable release of that line. Comparing against the repository's
       # tags means a release that finishes after a newer one (or a fix for an
@@ -365,7 +366,16 @@ jobs:
             fi
           fi
         else
-          tags+=("${GITHUB_REF_NAME}" "${GITHUB_SHA::7}")
+          tags+=("${GITHUB_SHA::7}")
+          # Move the branch tag only while this commit is still the branch
+          # head: the concurrency group serializes runs but does not promise
+          # they start in commit order, and a newer commit's run moves it.
+          head="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${GITHUB_REF_NAME}" --jq .object.sha)"
+          if [[ "${head}" == "${GITHUB_SHA}" ]]; then
+            tags+=("${GITHUB_REF_NAME}")
+          else
+            echo "::notice::${GITHUB_REF_NAME} is now at ${head}, not ${GITHUB_SHA}; leaving the ${GITHUB_REF_NAME} tag to that commit's run"
+          fi
         fi
         echo "Image tags: ${tags[*]}"
         echo "tags=${tags[*]}" >> "$GITHUB_OUTPUT"
