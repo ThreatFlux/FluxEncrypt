@@ -15,10 +15,12 @@ No library, async or CLI code changed; the crates behave exactly as 0.7.8.
 - The CLI container image is now published to
   `ghcr.io/threatflux/fluxencrypt` for `linux/amd64` and `linux/arm64` and
   signed with keyless cosign. The new `docker.yml` workflow builds the
-  distroless image from the root `Dockerfile` on every push to `main` and every
-  release tag, smoke-tests each platform (key generation and an
-  encrypt/decrypt roundtrip), scans it with Trivy and attaches an SPDX SBOM to
-  the run. Pull requests build and test `linux/amd64` without pushing.
+  distroless image from the root `Dockerfile` on every push to `main` (tags
+  `main` and the short commit SHA) and every release tag (tags `X.Y.Z`, `X.Y`,
+  `X` and `latest`). It smoke-tests each platform (key generation and an
+  encrypt/decrypt roundtrip), scans the image with Trivy before signing it and
+  keeps an SPDX SBOM with the run. Pull requests build and test `linux/amd64`
+  without pushing.
 
 ### Changed
 - When CHANGELOG.md has no section for a release and the auto-release notes

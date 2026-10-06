@@ -31,11 +31,15 @@ on:
 permissions:
   contents: read
 
-# Push runs for the same commit (a branch run and a tag run) wait for each
-# other instead of racing for the commit's image tags. Every other event gets
-# its own group and is never queued.
+# Each mutable image tag has one kind of publisher. Branch runs (push,
+# schedule or dispatch) publish the branch tag (main) and the short commit SHA;
+# tag runs publish the version tags and latest. Runs for the same branch share
+# a group, so an older commit never finishes after a newer one and moves main
+# back; a newer pending run replaces an older pending one. Each release tag
+# gets its own group, so a release build is never cancelled. Pull requests
+# push nothing and get a group per run.
 concurrency:
-  group: docker-${{ github.event_name == 'push' && github.sha || github.run_id }}
+  group: docker-${{ github.event_name == 'pull_request' && github.run_id || github.ref }}
   cancel-in-progress: false
 
 env:
@@ -45,15 +49,6 @@ env:
 jobs:
   build:
     name: Build Docker Image
-    # Auto Release (threatflux-automation GitHub App) pushes its
-    # "chore: release vX.Y.Z" version-bump commit to main and then tags that
-    # same commit, and both pushes start this workflow. The tag run publishes
-    # the commit with its version tags, the commit SHA tag and latest, so the
-    # branch run for the release commit is skipped. Every other job needs this
-    # one and is skipped with it.
-    if: >-
-      !(github.event_name == 'push' && github.ref_type == 'branch' &&
-      startsWith(github.event.head_commit.message, 'chore: release v'))
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -94,14 +89,16 @@ jobs:
       uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0
       with:
         images: ${{ env.REGISTRY }}/${{ steps.lowercase.outputs.image_name }}
+        # Branch runs: the branch name and the short commit SHA. Release tag
+        # runs: X.Y.Z, X.Y and X, plus latest (added by the default
+        # flavor latest=auto for stable versions only).
         tags: |
           type=ref,event=branch
           type=ref,event=pr
           type=semver,pattern={{version}}
           type=semver,pattern={{major}}.{{minor}}
           type=semver,pattern={{major}}
-          type=sha,prefix=
-          type=raw,value=latest,enable={{is_default_branch}}
+          type=sha,prefix=,enable=${{ github.ref_type != 'tag' }}
         labels: |
           org.opencontainers.image.title=FluxEncrypt
           org.opencontainers.image.description=FluxEncrypt hybrid RSA and AES-GCM encryption command-line interface
@@ -234,7 +231,10 @@ jobs:
         output: trivy-results.sarif
         severity: CRITICAL,HIGH
         vuln-type: os,library
-      continue-on-error: true
+        # Findings are reported to code scanning and do not fail the job
+        # (exit-code 0), but a scanner failure does, so an image that was not
+        # scanned is never signed.
+        exit-code: "0"
 
     - name: Upload Trivy results
       if: always() && hashFiles('trivy-results.sarif') != ''
