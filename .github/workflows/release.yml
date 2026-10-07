@@ -338,8 +338,13 @@ jobs:
         Copy-Item "target/${env:TARGET}/release/${env:BINARY_NAME}.exe" dist/
         $archive = "${env:BINARY_NAME}-${env:ARTIFACT}.zip"
         Compress-Archive -Path dist/* -DestinationPath $archive
-        $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLower()
-        "$hash  $archive" | Out-File -Encoding ascii "$archive.sha256"
+        $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+        # The "<hash>  <file>" line shasum writes, with an LF ending, so
+        # `shasum -a 256 -c` and `sha256sum -c` verify it on any platform.
+        # (Out-File ends the line with CRLF, and the stray CR makes those
+        # tools look for a file named "<archive>\r".)
+        [System.IO.File]::WriteAllText((Join-Path $PWD "$archive.sha256"), "$hash  $archive`n")
+        Get-Content "$archive.sha256"
 
     - name: Upload artifacts (Unix)
       if: runner.os != 'Windows'
