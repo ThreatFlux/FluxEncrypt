@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `release.yml` writes the Windows archive's `.sha256` file with an LF line
+  ending, like the Unix archives' files. Every
+  `fluxencrypt-cli-windows-amd64.zip.sha256` asset published so far (0.7.7 to
+  0.7.9) ends in CRLF, so `shasum -a 256 -c` and macOS `sha256sum -c` report
+  the archive as missing; check one with
+  `tr -d '\r' < fluxencrypt-cli-windows-amd64.zip.sha256 | shasum -a 256 -c`
+  (the hash itself is correct).
+
 ## [0.7.9] - 2026-10-06
 
 No library, async or CLI code changed; the crates behave exactly as 0.7.8.
