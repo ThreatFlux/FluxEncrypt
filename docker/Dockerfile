@@ -5,7 +5,7 @@
 # command above when it is updated.
 
 # rust 1.99.0 on Debian 13 (trixie)
-FROM rust:1.99.0-slim-trixie@sha256:24e632c09342c20abf8312cf4f61430a911c01ed3a5e4c02b87292b1c39c5273 AS builder
+FROM rust:1.99.0-slim-trixie@sha256:2752b332db73fdbb7dc576f06c82ed1f312005784ef913d7e04a28f5f55dc581 AS builder
 # tini is installed here so the runtime stage can copy it out: distroless ships
 # no init, and PID 1 must reap zombies and forward signals. Package revisions
 # follow the pinned base image's Debian 13 repositories.
