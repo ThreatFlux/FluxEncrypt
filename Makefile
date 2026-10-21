@@ -43,12 +43,14 @@ msrv:
 	rustc +$(MSRV) --version --verbose
 	cargo +$(MSRV) check --locked --workspace --all-features --all-targets
 security:
+	python3 scripts/check-rsa-scope.py
 	cargo audit --ignore RUSTSEC-2023-0071
 	cargo deny check
 workflow-check:
 	python3 scripts/check-action-pins.py
 	python3 scripts/test_set_version.py
 	python3 scripts/test_geiger_report.py
+	python3 scripts/test_rsa_scope.py
 	$(ACTIONLINT)
 	$(YAMLLINT) -c .yamllint.yml .github/workflows
 hooks-install:

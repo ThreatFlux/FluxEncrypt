@@ -37,6 +37,11 @@ jobs:
           target
         key: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-rust-1.99.1-${{ hashFiles('**/Cargo.lock') }}
 
+    - name: Enforce private-RSA advisory scope
+      run: |
+        python3 scripts/check-rsa-scope.py
+        python3 scripts/test_rsa_scope.py
+
     - name: Install cargo-audit
       run: cargo install cargo-audit --version 0.22.2 --locked
 
@@ -112,7 +117,7 @@ jobs:
       run: cargo install cargo-outdated --version 0.19.0 --locked
 
     - name: Check for outdated dependencies
-      run: cargo outdated --workspace --depth 1 --exit-code 1 --ignore rand,sha2,pkcs8
+      run: cargo outdated --workspace --depth 1 --exit-code 1
 
   secrets_scan:
     permissions:

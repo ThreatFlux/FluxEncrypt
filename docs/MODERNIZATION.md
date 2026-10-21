@@ -6,16 +6,7 @@ This change starts from main `33174c3e92f481654313daf084d58a98dfb005ef` (0.7.6).
 
 The development toolchain is **Rust 1.99.1**, released October 15, verified against the [official distribution manifest](https://static.rust-lang.org/dist/channel-rust-stable.toml). The supported MSRV remains **1.97.1**, checked with that compiler against the locked workspace and all targets. CI explicitly overrides the repository toolchain for its MSRV, beta and nightly lanes.
 
-Direct dependencies use the latest non-yanked stable versions except the three public RSA compatibility dependencies below. The lockfile also refreshes compatible transitive releases. In particular, `dirs` moves from 6.0.0 to 7.0.0; configuration-path behavior remains covered by CLI tests.
-
-| Dependency | Selected stable version | Latest stable major | Reason |
-| --- | --- | --- | --- |
-| rsa | 0.9.10 | 0.9 | Latest stable; 0.10 remains a release candidate |
-| rand | 0.8.8 | 0.10 | RSA 0.9 requires `rand_core` 0.6 RNG traits |
-| sha2 | 0.10.9 | 0.11 | RSA's OAEP digest API uses `digest` 0.10 |
-| pkcs8 | 0.10.2 | 0.11 | The exposed RSA key types implement PKCS#8 0.10 traits |
-
-Sources: [RSA crate metadata](https://crates.io/api/v1/crates/rsa), [RSA 0.9.10 manifest](https://docs.rs/crate/rsa/0.9.10/source/Cargo.toml), and crates.io metadata for [rand](https://crates.io/api/v1/crates/rand), [sha2](https://crates.io/api/v1/crates/sha2) and [pkcs8](https://crates.io/api/v1/crates/pkcs8). Using their newer major versions would require a separate cryptographic API migration; prereleases are not introduced here. The outdated-dependency gate retains checks for the other direct dependencies and excludes only these three documented compatibility lines.
+Direct dependencies use the latest non-yanked stable versions. Redundant direct `rand`, `sha2` and `pkcs8` declarations are removed: RSA-compatible public encryption, key generation and codecs use the stable RSA crate's reexports. Older trait families remain upstream transitive dependencies without forcing incompatible majors. The affected private operation uses AWS-LC as described below. No prerelease cryptography is selected. The outdated-dependency gate checks all direct dependencies without compatibility exclusions.
 
 All six GitHub workflows use full commit SHA references verified against upstream stable releases and their input schemas. The channel-based `dtolnay/rust-toolchain` action has no release series; its current upstream commit is pinned. CodeQL remains native Rust with both existing query suites. The ThreatFlux reusable auto-release workflow remains the release owner; it runs as the threatflux-automation GitHub App, so the tag it pushes starts `release.yml` through its `push: tags` trigger. `release.yml` builds the CLI for six targets, attaches CycloneDX SBOMs for the three crates, and publishes `fluxencrypt`, `fluxencrypt-async` and `fluxencrypt-cli` to crates.io in that order through trusted publishing (a short-lived OIDC token in the `crates-io` environment; no registry secret), skipping any version that is already published. Both workflows take a `dry_run` input: `gh workflow run release.yml -f version=X.Y.Z -f dry_run=true` builds, packages and runs `cargo publish --dry-run` without tagging or publishing.
 
@@ -25,13 +16,11 @@ The stable cross Windows image could not link Rust 1.99's `GetHostNameW` referen
 
 The Dockerfiles use Rust 1.99.1. `Dockerfile` and `docker/Dockerfile` now build a static PIE with Alpine's maintained musl archive and run the CLI plus static tini in scratch as uid 65532. Their linker-map and ELF checks prove there are no runtime shared libraries. The alternate `docker/Dockerfile.alpine` keeps its Alpine runtime. Entry point names, all Cargo features, nonroot operation and key/file roundtrips are preserved. See [the detailed security rollup](security/dependency-security-rollup.md) for artifact scope, each historical alert and validation evidence.
 
-## RSA advisory remains unresolved
+## RSA private-operation remediation
 
-**RUSTSEC-2023-0071 is still applicable.** This library actually performs RSA private-key decryption. The prior exception is retained in cargo-audit and cargo-deny; no additional vulnerability exceptions are added. It is not a claim that RSA is constant-time or that the advisory requires local access.
+The RustCrypto timing advisory was a true positive for the previous private RSA-OAEP decrypt call. That private operation now uses maintained AWS-LC with the same SHA-512/MGF1 parameters. The raw RustCrypto key types remain for API/key-format compatibility, so their upstream package advisory is still present; callers invoking the public raw accessor's private operations themselves remain exposed. The audit/deny exception is narrowed and guarded against the former private call path. See [the exact call path, backend change and consumer boundary](security/rsa-advisory.md).
 
-The [current RustSec advisory](https://rustsec.org/advisories/RUSTSEC-2023-0071.html) says no patched release exists, including the latest stable RSA 0.9.10. Attackers who can observe timing over a network may recover private-key information. Avoid exposing these private-key operations through endpoints where attackers can measure timing. An uncompromised local use case is the upstream workaround. Updating dependencies alone does not resolve this risk; changing the RSA backend or public API needs separate review.
-
-Configured security checks must pass for every other advisory and for existing license/source policies. An additional audit without the exception is recorded separately to show the one unresolved RSA finding. Trivy's existing informational findings policy and unfixed-vulnerability filter are unchanged; tooling failures still fail its job. Unsafe-code inventory uses Geiger's native informational JSON mode: valid reports with the expected workspace package metrics and full stderr diagnostics are retained. Build/tooling failures propagate. Current upstream inventory limitations include unscanned generated/non-Rust inputs and a dependency syntax parser warning; this does not establish an absence of unsafe code. Geiger uses a separate target directory because the upstream tool cleans its analysis target before rebuilding.
+Every other advisory and existing license/source policy must still pass. Container scans include all severities and no new blanket vulnerability filter. Geiger inventory retains its native JSON metrics and stderr diagnostics, and tooling failures still propagate. Inventory limitations do not establish an absence of unsafe code.
 
 ## Existing tests and failure handling
 
@@ -50,3 +39,5 @@ For a separate Cargo target use `CARGO_TARGET_DIR=/absolute/path`; four build jo
 Cargo package verification checks all three crates; Cargo omits the existing workspace-external integration test paths from registry archives. Those suites run in checkout CI rather than being shipped as package tests.
 
 Hosted platform, cross-target, CodeQL, dependency-review and reporting results are validated on the pushed head. Local native checks do not establish results for macOS, Windows, beta or nightly runners, nor for an external Codecov upload.
+
+Private RSA-OAEP decryption now uses AWS-LC with the existing SHA-512/MGF1 parameters. The original RustCrypto private-operation timing finding was a TP; the upstream package advisory still applies to consumers using the raw compatibility accessor themselves. See [the security scope and backend migration](security/rsa-advisory.md). Native builds additionally require CMake and a C toolchain; container builders install their prerequisites.

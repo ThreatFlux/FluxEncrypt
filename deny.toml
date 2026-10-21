@@ -16,7 +16,9 @@ ignore = [
     # RUSTSEC-2023-0071: Marvin Attack - timing sidechannel in RSA crate
     # No fix available yet, tracked at https://github.com/RustCrypto/RSA/issues/626
     # Private-key operations are affected, including remotely measurable timing.
-    # Retain the existing exception; mitigations/limitations: docs/MODERNIZATION.md.
+    # Private RSA-OAEP now uses AWS-LC; rsa remains for key formats/public operations.
+    # scripts/check-rsa-scope.py guards the former private-call path. The public
+    # raw key accessor remains outside this guarantee; see docs/security/rsa-advisory.md.
     "RUSTSEC-2023-0071"
 ]
 

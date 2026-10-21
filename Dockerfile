@@ -2,9 +2,15 @@
 # into a static PIE. Use Alpine's maintained musl archive, not Rust's bundled
 # CRT, and prove the selected libc from the linker map on every architecture.
 FROM rust:1.99.1-alpine3.24@sha256:557a94c82b485a14b569120e00867267108c734efe33f10cc31ca0cd5dd1eca9 AS builder
-RUN apk add --no-cache build-base binutils tini-static
+RUN apk add --no-cache build-base binutils cmake perl tini-static
 WORKDIR /app
-COPY . .
+# Copy build inputs explicitly: security reports and workflow edits do not
+# invalidate native compilation, and no generated credentials enter this stage.
+COPY Cargo.toml Cargo.lock rust-toolchain.toml README.md LICENSE ./
+COPY fluxencrypt/ fluxencrypt/
+COPY fluxencrypt-cli/ fluxencrypt-cli/
+COPY fluxencrypt-async/ fluxencrypt-async/
+COPY tests/ tests/
 ARG CARGO_BUILD_JOBS=4
 ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
 RUN build_target="$(rustc -vV | sed -n 's/^host: //p')" && \
@@ -23,7 +29,7 @@ RUN build_target="$(rustc -vV | sed -n 's/^host: //p')" && \
     done && \
     printf 'nonroot:x:65532:65532:nonroot:/data:/sbin/nologin\n' > /out/etc/passwd && \
     printf 'nonroot:x:65532:nonroot\n' > /out/etc/group && \
-    { rustc -vV; apk list --installed musl musl-dev tini-static; \
+    { rustc -vV; cargo tree --locked -p aws-lc-sys --depth 0; apk list --installed musl musl-dev tini-static; \
       sha256sum /usr/lib/libc.a /sbin/tini-static /native-unwind/libunwind.a; \
       grep -oE '/[^[:space:](]+/libc\.a' /native-link.map | sort -u; \
     } > /out/doc/native-build.txt

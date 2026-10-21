@@ -38,7 +38,11 @@ impl PrivateKey {
         self.inner.size()
     }
 
-    /// Get a reference to the inner RSA private key
+    /// Get a reference to the inner RSA private key.
+    ///
+    /// This compatibility accessor exposes RustCrypto's representation, whose
+    /// private decrypt/sign operations remain affected by RUSTSEC-2023-0071.
+    /// Use `RsaOaepCipher::decrypt` for FluxEncrypt's AWS-LC-backed decryption.
     pub fn inner(&self) -> &RsaPrivateKey {
         &self.inner
     }
@@ -54,9 +58,9 @@ impl PrivateKey {
 
     /// Export the private key as encrypted PEM format (PKCS#8 format with password protection)
     pub fn to_encrypted_pem(&self, password: &str) -> Result<String> {
-        use pkcs8::PrivateKeyInfo;
-        use rand::rngs::OsRng;
         use rsa::pkcs8::EncodePrivateKey;
+        use rsa::pkcs8::PrivateKeyInfo;
+        use rsa::rand_core::OsRng;
 
         let private_key_der = self.inner.to_pkcs8_der().map_err(|e| {
             FluxError::crypto(format!("Failed to encode private key as PKCS#8 DER: {}", e))
@@ -70,7 +74,7 @@ impl PrivateKey {
             .map_err(|e| FluxError::crypto(format!("Failed to encrypt private key: {}", e)))?;
 
         let pem_string = encrypted_private_key
-            .to_pem("ENCRYPTED PRIVATE KEY", pkcs8::LineEnding::LF)
+            .to_pem("ENCRYPTED PRIVATE KEY", rsa::pkcs8::LineEnding::LF)
             .map_err(|e| {
                 FluxError::crypto(format!(
                     "Failed to encode encrypted private key as PEM: {}",

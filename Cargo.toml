@@ -21,12 +21,12 @@ rust-version = "1.97.1"
 [workspace.dependencies]
 # Core cryptography
 ring = "0.17.14"
-# rsa 0.9.x is the latest *stable* release line; 0.10 is still a release candidate.
-# Its public API is built on pkcs8 0.10, digest/sha2 0.10 and rand_core 0.6, so the
-# three crates below stay on those lines until rsa 0.10 ships stable.
-rsa = "0.9.10"
-pkcs8 = { version = "0.10.2", features = ["pkcs5", "encryption", "pem"] }
-sha2 = "0.10.9"
+# Private RSA operations use AWS-LC; rsa remains for public/key-format compatibility.
+aws-lc-rs = "1.18.2"
+# Current stable RSA retains public/key-format compatibility. Its required
+# PKCS#8/digest/RNG traits are accessed through reexports, not redundant legacy
+# direct dependencies. Private RSA operations use the AWS-LC backend above.
+rsa = { version = "0.9.10", features = ["pkcs5", "sha2", "getrandom"] }
 zeroize = { version = "1.9.1", features = ["derive"] }
 
 # Encoding and serialization
@@ -60,8 +60,6 @@ hex = "0.4.3"
 
 # Development utilities
 tempfile = "3.27.0"
-# Held at 0.8 by rsa 0.9 (rand_core 0.6 / CryptoRngCore); see note above.
-rand = "0.8.8"
 
 [profile.release]
 lto = true
