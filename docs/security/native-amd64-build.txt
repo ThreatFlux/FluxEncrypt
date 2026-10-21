@@ -1,0 +1,14 @@
+rustc 1.99.1 (58cf8f9c3 2026-10-13)
+binary: rustc
+commit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67
+commit-date: 2026-10-13
+host: x86_64-unknown-linux-musl
+release: 1.99.1
+LLVM version: 23.1.1
+musl-1.2.6-r2 x86_64 {musl} (MIT) [installed]
+musl-dev-1.2.6-r2 x86_64 {musl} (MIT) [installed]
+tini-static-0.19.0-r3 x86_64 {tini} (MIT) [installed]
+ff0d5e7ac47afd296bb8bad4a67d4b0efbc763298a9fe6a4b1ee3e9d0fc6ec68  /usr/lib/libc.a
+1f33e7efb9ea7b4faeca63302082ce1b1380d16ba6d68b720288bd119607c117  /sbin/tini-static
+18ad5e6b1b383da0f07b64e94f68f20021412490d38835e99268569a03c7f449  /native-unwind/libunwind.a
+/usr/lib/gcc/x86_64-alpine-linux-musl/15.2.0/../../../../lib/libc.a

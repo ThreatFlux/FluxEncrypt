@@ -27,12 +27,12 @@ ring = "0.17.14"
 rsa = "0.9.10"
 pkcs8 = { version = "0.10.2", features = ["pkcs5", "encryption", "pem"] }
 sha2 = "0.10.9"
-zeroize = { version = "1.9.0", features = ["derive"] }
+zeroize = { version = "1.9.1", features = ["derive"] }
 
 # Encoding and serialization
 base64 = "0.23.1"
 serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.151"
+serde_json = "1.0.154"
 
 # Error handling
 thiserror = "2.0.21"
@@ -40,7 +40,7 @@ anyhow = "1.0.104"
 
 # Performance and concurrency
 rayon = "1.12.0"
-tokio = { version = "1.53.2", features = ["full"] }
+tokio = { version = "1.54.0", features = ["full"] }
 futures = "0.3.34"
 
 # CLI utilities
@@ -55,7 +55,7 @@ log = "0.4.34"
 
 # Testing
 criterion = { version = "0.8.2", features = ["html_reports"] }
-proptest = "1.11.0"
+proptest = "1.12.0"
 hex = "0.4.3"
 
 # Development utilities

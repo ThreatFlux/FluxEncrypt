@@ -26,7 +26,7 @@ jobs:
     - name: Install Rust
       uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8  # v1
       with:
-        toolchain: 1.99.0
+        toolchain: 1.99.1
 
     - name: Cache dependencies
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
@@ -35,7 +35,7 @@ jobs:
           ~/.cargo/registry
           ~/.cargo/git
           target
-        key: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-rust-1.99.0-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-rust-1.99.1-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Build documentation
       run: |
@@ -98,7 +98,7 @@ jobs:
     - name: Install Rust
       uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8  # v1
       with:
-        toolchain: 1.99.0
+        toolchain: 1.99.1
 
     - name: Cache dependencies
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
@@ -107,7 +107,7 @@ jobs:
           ~/.cargo/registry
           ~/.cargo/git
           target
-        key: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-rust-1.99.0-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-rust-1.99.1-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Compile and run all examples
       run: make examples-check
