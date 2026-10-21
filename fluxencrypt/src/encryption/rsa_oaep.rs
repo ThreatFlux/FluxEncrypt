@@ -5,8 +5,11 @@
 
 use crate::error::{FluxError, Result};
 use crate::keys::{PrivateKey, PublicKey};
+use aws_lc_rs::rsa::{OAEP_SHA512_MGF1SHA512, OaepPrivateDecryptingKey, PrivateDecryptingKey};
 use rsa::Oaep;
-use sha2::Sha512;
+use rsa::pkcs8::EncodePrivateKey;
+use rsa::sha2::Sha512;
+use zeroize::Zeroizing;
 
 /// RSA-OAEP cipher for asymmetric encryption operations
 #[derive(Debug)]
@@ -41,7 +44,7 @@ impl RsaOaepCipher {
         let padding = Oaep::new::<Sha512>();
 
         // Get a random number generator
-        let mut rng = rand::thread_rng();
+        let mut rng = rsa::rand_core::OsRng;
 
         // Encrypt using RSA-OAEP
         public_key
@@ -68,14 +71,21 @@ impl RsaOaepCipher {
             )));
         }
 
-        // Create OAEP padding with SHA-512
-        let padding = Oaep::new::<Sha512>();
-
-        // Decrypt using RSA-OAEP
-        private_key
+        // RustCrypto RSA private operations are affected by RUSTSEC-2023-0071.
+        // Keep its public key/codec API, but perform private operations in AWS-LC.
+        // SecretDocument zeroizes the temporary PKCS#8 encoding on drop.
+        let der = private_key
             .inner()
-            .decrypt(padding, ciphertext)
-            .map_err(|e| FluxError::crypto(format!("RSA decryption failed: {}", e)))
+            .to_pkcs8_der()
+            .map_err(|_| FluxError::crypto("RSA decryption failed"))?;
+        let key = PrivateDecryptingKey::from_pkcs8(der.as_bytes())
+            .map_err(|_| FluxError::crypto("RSA decryption failed"))?;
+        let key = OaepPrivateDecryptingKey::new(key)
+            .map_err(|_| FluxError::crypto("RSA decryption failed"))?;
+        let mut plaintext = Zeroizing::new(vec![0; key.min_output_size()]);
+        key.decrypt(&OAEP_SHA512_MGF1SHA512, ciphertext, &mut plaintext, None)
+            .map(|plaintext| plaintext.to_vec())
+            .map_err(|_| FluxError::crypto("RSA decryption failed"))
     }
 
     /// Calculate the maximum plaintext length for RSA-OAEP encryption
@@ -113,6 +123,75 @@ mod tests {
     use super::*;
     use crate::keys::KeyPair;
     use proptest::prelude::*;
+
+    #[test]
+    fn test_aws_lc_sha512_interoperability_and_digest_binding() {
+        use aws_lc_rs::rsa::{OAEP_SHA256_MGF1SHA256, OaepPublicEncryptingKey};
+
+        let keypair = KeyPair::generate(2048).unwrap();
+        let der = keypair.private_key().inner().to_pkcs8_der().unwrap();
+        let native = PrivateDecryptingKey::from_pkcs8(der.as_bytes()).unwrap();
+        let native_public = OaepPublicEncryptingKey::new(native.public_key()).unwrap();
+        let plaintext = b"existing OAEP SHA-512 wire format";
+        let cipher = RsaOaepCipher::new();
+        let mut ciphertext = vec![0; native_public.ciphertext_size()];
+        let encrypted = native_public
+            .encrypt(&OAEP_SHA512_MGF1SHA512, plaintext, &mut ciphertext, None)
+            .unwrap();
+        assert_eq!(
+            cipher.decrypt(keypair.private_key(), encrypted).unwrap(),
+            plaintext
+        );
+
+        // Public encryption remains compatible with the previous RustCrypto path.
+        let legacy_ciphertext = cipher.encrypt(keypair.public_key(), plaintext).unwrap();
+        let native_private = OaepPrivateDecryptingKey::new(native).unwrap();
+        let mut output = Zeroizing::new(vec![0; native_private.min_output_size()]);
+        assert_eq!(
+            native_private
+                .decrypt(
+                    &OAEP_SHA512_MGF1SHA512,
+                    &legacy_ciphertext,
+                    &mut output,
+                    None
+                )
+                .unwrap(),
+            plaintext
+        );
+
+        // Do not silently change the existing OAEP/MGF digest to SHA-256.
+        let wrong_digest = native_public
+            .encrypt(&OAEP_SHA256_MGF1SHA256, plaintext, &mut ciphertext, None)
+            .unwrap();
+        let error = cipher
+            .decrypt(keypair.private_key(), wrong_digest)
+            .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            FluxError::crypto("RSA decryption failed").to_string()
+        );
+    }
+
+    #[test]
+    fn test_malformed_private_ciphertexts_have_one_backend_error() {
+        let keypair = KeyPair::generate(2048).unwrap();
+        let cipher = RsaOaepCipher::new();
+        let valid = cipher
+            .encrypt(keypair.public_key(), b"authenticated key wrap")
+            .unwrap();
+        let mut tampered = valid.clone();
+        *tampered.last_mut().unwrap() ^= 1;
+        let malformed = [vec![0; valid.len()], vec![0xff; valid.len()], tampered];
+        for ciphertext in malformed {
+            let error = cipher
+                .decrypt(keypair.private_key(), &ciphertext)
+                .unwrap_err();
+            assert_eq!(
+                error.to_string(),
+                FluxError::crypto("RSA decryption failed").to_string()
+            );
+        }
+    }
 
     #[test]
     fn test_rsa_oaep_cipher_creation() {

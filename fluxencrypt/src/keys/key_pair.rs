@@ -22,7 +22,7 @@ impl KeyPair {
     pub fn generate(key_size: usize) -> Result<Self> {
         validate_key_size(key_size)?;
 
-        let mut rng = rand::thread_rng();
+        let mut rng = rsa::rand_core::OsRng;
         let private_key = RsaPrivateKey::new(&mut rng, key_size)
             .map_err(|e| FluxError::crypto(format!("Failed to generate RSA private key: {}", e)))?;
 

@@ -30,7 +30,7 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_BUILD_JOBS: 4
   RUST_BACKTRACE: 1
-  RUST_VERSION: 1.99.0
+  RUST_VERSION: 1.99.1
   BINARY_NAME: fluxencrypt-cli
   BINARY_PACKAGE: fluxencrypt-cli
   # Workspace crates published to crates.io, in dependency order: both

@@ -26,7 +26,7 @@ jobs:
     - name: Install Rust
       uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8  # v1
       with:
-        toolchain: 1.99.0
+        toolchain: 1.99.1
 
     - name: Cache dependencies
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
@@ -35,7 +35,12 @@ jobs:
           ~/.cargo/registry
           ~/.cargo/git
           target
-        key: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-rust-1.99.0-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-rust-1.99.1-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Enforce private-RSA advisory scope
+      run: |
+        python3 scripts/check-rsa-scope.py
+        python3 scripts/test_rsa_scope.py
 
     - name: Install cargo-audit
       run: cargo install cargo-audit --version 0.22.2 --locked
@@ -75,7 +80,7 @@ jobs:
     - name: Install Rust
       uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8  # v1
       with:
-        toolchain: 1.99.0
+        toolchain: 1.99.1
 
     - name: Cache dependencies
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
@@ -84,14 +89,14 @@ jobs:
           ~/.cargo/registry
           ~/.cargo/git
           target
-        key: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-rust-1.99.0-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-rust-1.99.1-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Install cargo-geiger
-      run: cargo install cargo-geiger --version 0.13.0 --locked
+      run: cargo install cargo-geiger --version 0.14.0 --locked
 
     - name: Run cargo geiger (unsafe code detection)
       env:
-        RUSTUP_TOOLCHAIN: 1.99.0
+        RUSTUP_TOOLCHAIN: 1.99.1
         CARGO_TARGET_DIR: ${{ github.workspace }}/target/geiger
       run: |
         mkdir -p geiger-reports
@@ -112,7 +117,7 @@ jobs:
       run: cargo install cargo-outdated --version 0.19.0 --locked
 
     - name: Check for outdated dependencies
-      run: cargo outdated --workspace --depth 1 --exit-code 1 --ignore rand,sha2,pkcs8
+      run: cargo outdated --workspace --depth 1 --exit-code 1
 
   secrets_scan:
     permissions:
@@ -129,7 +134,7 @@ jobs:
       uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
       with:
         scan-type: 'fs'
-        version: 'v0.75.0'
+        version: 'v0.76.0'
         ignore-unfixed: true
         format: 'sarif'
         output: 'trivy-results.sarif'

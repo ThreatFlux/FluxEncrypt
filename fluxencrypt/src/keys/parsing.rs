@@ -198,7 +198,7 @@ pub fn parse_private_key_from_str(pem_str: &str) -> Result<PrivateKey> {
 
 /// Convenience function to parse an encrypted private key from a PEM string
 pub fn parse_encrypted_private_key_from_str(pem_str: &str, password: &str) -> Result<PrivateKey> {
-    use pkcs8::DecodePrivateKey;
+    use rsa::pkcs8::DecodePrivateKey;
 
     // Parse the encrypted private key PEM and decrypt it
     let rsa_private_key = RsaPrivateKey::from_pkcs8_encrypted_pem(pem_str, password)

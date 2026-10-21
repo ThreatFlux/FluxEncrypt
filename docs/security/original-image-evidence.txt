@@ -1,0 +1,343 @@
+amd64 sha256:d02b606380c42d08a4aa0dd6db75ecb6d7b68c1f8fa1ee99d98c01b0c9a758c2
+Image revision: 7e104c9265904a0e7dbbe4879a815d00701dd8ca
+Package: libc6
+Source: glibc
+Version: 2.41-12+deb13u4
+Architecture: amd64
+Maintainer: GNU Libc Maintainers <debian-glibc@lists.debian.org>
+Installed-Size: 13226
+Depends: libgcc-s1
+Recommends: libidn2-0 (>= 2.0.5~)
+Suggests: glibc-doc, debconf | debconf-2.0, libc-l10n, locales, libnss-nis, libnss-nisplus
+Breaks: base-files (<< 13.3~), chrony (<< 4.2-3~), dhcpcd (<< 1:10.1.0-7~), fakechroot (<< 2.19-3.5), firefox (<< 91~), firefox-esr (<< 91~), gnumach-image-1.8-486 (<< 2:1.8+git20210923~), gnumach-image-1.8-486-dbg (<< 2:1.8+git20210923~), gnumach-image-1.8-xen-486 (<< 2:1.8+git20210923~), gnumach-image-1.8-xen-486-dbg (<< 2:1.8+git20210923~), hurd (<< 1:0.9.git20220301-2), libamdhip64-5 (<< 5.7.1-5+b1), libhiprtc-builtins5 (<< 5.7.1-5+b1), librccl1 (<< 5.4.3-3+b1), libswupdate0.1 (<< 2024.12.1+dfsg-1+b3), locales (<< 2.41), locales-all (<< 2.41), lua-swupdate (<< 2024.12.1+dfsg-1+b3), nscd (<< 2.41), pd-scaf (<< 1:0.14.1+darcs20180201-6+b4), postgresql-15-pllua (<< 1:2.0.12-4), postgresql-17-pllua (<< 1:2.0.12-3+b2), python3-iptables (<< 1.0.0-2), python3-mrgingham (<< 1.25-1), python3-onnxruntime (<< 1.20.1+dfsg-2~), sysvinit (<< 3.09-2~), sysvinit-core (<< 3.09-2~), tinydns (<< 1:1.05-14), uwsgi-plugin-pypy3 (<< 0.0.2+b1), valgrind (<< 1:3.19.0-1~)
+Replaces: libc6-amd64
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: https://www.gnu.org/software/libc/libc.html
+Description: GNU C Library: Shared libraries
+ Contains the standard libraries that are used by nearly all programs on
+ the system. This package includes shared versions of the standard C library
+ and the standard math library, as well as many others.
+
+Package: libgcc-s1
+Source: gcc-14
+Version: 14.2.0-19
+Architecture: amd64
+Protected: yes
+Maintainer: Debian GCC Maintainers <debian-gcc@lists.debian.org>
+Installed-Size: 197
+Depends: gcc-14-base (= 14.2.0-19), libc6 (>= 2.35)
+Replaces: libgcc1 (<< 1:10)
+Provides: libgcc1 (= 1:14.2.0-19)
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: http://gcc.gnu.org/
+Description: GCC support library
+ Shared version of the support library, a library of internal subroutines
+ that GCC uses to overcome shortcomings of particular machines, or
+ special needs for some languages.
+Important: yes
+
+Package: gcc-14-base
+Source: gcc-14
+Version: 14.2.0-19
+Architecture: amd64
+Maintainer: Debian GCC Maintainers <debian-gcc@lists.debian.org>
+Installed-Size: 112
+Breaks: gnat (<< 7)
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: http://gcc.gnu.org/
+Description: GCC, the GNU Compiler Collection (base package)
+ This package contains files common to all languages and libraries
+ contained in the GNU Compiler Collection (GCC).
+
+Package: libgomp1
+Source: gcc-14
+Version: 14.2.0-19
+Architecture: amd64
+Maintainer: Debian GCC Maintainers <debian-gcc@lists.debian.org>
+Installed-Size: 368
+Depends: gcc-14-base (= 14.2.0-19), libc6 (>= 2.38)
+Breaks: gcc-4.3 (<< 4.3.6-1), gcc-4.4 (<< 4.4.6-4), gcc-4.5 (<< 4.5.3-2)
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: http://gcc.gnu.org/
+Description: GCC OpenMP (GOMP) support library
+ GOMP is an implementation of OpenMP for the C, C++, and Fortran compilers
+ in the GNU Compiler Collection.
+
+Package: libstdc++6
+Source: gcc-14
+Version: 14.2.0-19
+Architecture: amd64
+Maintainer: Debian GCC Maintainers <debian-gcc@lists.debian.org>
+Installed-Size: 3019
+Depends: gcc-14-base (= 14.2.0-19), libc6 (>= 2.38), libgcc-s1 (>= 4.3)
+Conflicts: scim (<< 1.4.2-1)
+Breaks: gcc-4.3 (<< 4.3.6-1), gcc-4.4 (<< 4.4.6-4), gcc-4.5 (<< 4.5.3-2)
+Replaces: libstdc++6-14-dbg (<< 4.9.0-3)
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: http://gcc.gnu.org/
+Description: GNU Standard C++ Library v3
+ This package contains an additional runtime library for C++ programs
+ built with the GNU compiler.
+ .
+ libstdc++-v3 is a complete rewrite from the previous libstdc++-v2, which
+ was included up to g++-2.95. The first version of libstdc++-v3 appeared
+ in g++-3.0.
+
+Package: zlib1g
+Source: zlib (1:1.3.dfsg+really1.3.1-1)
+Version: 1:1.3.dfsg+really1.3.1-1+b1
+Architecture: amd64
+Maintainer: Mark Brown <broonie@debian.org>
+Installed-Size: 173
+Depends: libc6 (>= 2.14)
+Conflicts: zlib1 (<= 1:1.0.4-7)
+Breaks: libxml2 (<< 2.7.6.dfsg-2), texlive-binaries (<< 2023.20230311.66589-8)
+Provides: libz1
+Section: libs
+Priority: required
+Multi-Arch: same
+Homepage: http://zlib.net/
+Description: compression library - runtime
+ zlib is a library implementing the deflate compression method found
+ in gzip and PKZIP.  This package includes the shared library.
+
+nscd paths: []
+privileged files: []
+C++ headers: []
+972bb2a18b71140dab0240f8a1f68ab3fb1d56bcd4c4f824a91b70888faf5a00 usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33
+b2318ddd294072437b66997e58395ef33f822c37b060abbc3e61a7caa67c9724 usr/share/gdb/auto-load/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33-gdb.py
+85590dd58edf5445e18bc7193e5ebc01ac5841f1ae187e97705a662e90c6421e usr/lib/x86_64-linux-gnu/libz.so.1.3.1
+9792e3cbb541c8f44c7acf5f14f4022ea62998ecc787d326bed4d8b6547dfd92 usr/lib/x86_64-linux-gnu/libc.so.6
+arm64 sha256:d66f1a1f3b3a55ed1b1551590a7b115cbd385d2ee26e9fecddbf974ffaf2f3d7
+Image revision: 7e104c9265904a0e7dbbe4879a815d00701dd8ca
+Package: libc6
+Source: glibc
+Version: 2.41-12+deb13u4
+Architecture: arm64
+Maintainer: GNU Libc Maintainers <debian-glibc@lists.debian.org>
+Installed-Size: 23769
+Depends: libgcc-s1
+Recommends: libidn2-0 (>= 2.0.5~)
+Suggests: glibc-doc, debconf | debconf-2.0, libc-l10n, locales, libnss-nis, libnss-nisplus
+Breaks: base-files (<< 13.3~), chrony (<< 4.2-3~), dhcpcd (<< 1:10.1.0-7~), fakechroot (<< 2.19-3.5), firefox (<< 91~), firefox-esr (<< 91~), gnumach-image-1.8-486 (<< 2:1.8+git20210923~), gnumach-image-1.8-486-dbg (<< 2:1.8+git20210923~), gnumach-image-1.8-xen-486 (<< 2:1.8+git20210923~), gnumach-image-1.8-xen-486-dbg (<< 2:1.8+git20210923~), hurd (<< 1:0.9.git20220301-2), libamdhip64-5 (<< 5.7.1-5+b1), libhiprtc-builtins5 (<< 5.7.1-5+b1), librccl1 (<< 5.4.3-3+b1), libswupdate0.1 (<< 2024.12.1+dfsg-1+b3), locales (<< 2.41), locales-all (<< 2.41), lua-swupdate (<< 2024.12.1+dfsg-1+b3), nscd (<< 2.41), pd-scaf (<< 1:0.14.1+darcs20180201-6+b4), postgresql-15-pllua (<< 1:2.0.12-4), postgresql-17-pllua (<< 1:2.0.12-3+b2), python3-iptables (<< 1.0.0-2), python3-mrgingham (<< 1.25-1), python3-onnxruntime (<< 1.20.1+dfsg-2~), sysvinit (<< 3.09-2~), sysvinit-core (<< 3.09-2~), tinydns (<< 1:1.05-14), uwsgi-plugin-pypy3 (<< 0.0.2+b1), valgrind (<< 1:3.19.0-1~)
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: https://www.gnu.org/software/libc/libc.html
+Description: GNU C Library: Shared libraries
+ Contains the standard libraries that are used by nearly all programs on
+ the system. This package includes shared versions of the standard C library
+ and the standard math library, as well as many others.
+
+Package: libgcc-s1
+Source: gcc-14
+Version: 14.2.0-19
+Architecture: arm64
+Protected: yes
+Maintainer: Debian GCC Maintainers <debian-gcc@lists.debian.org>
+Installed-Size: 148
+Depends: gcc-14-base (= 14.2.0-19), libc6 (>= 2.35)
+Breaks: libgcc-7-dev (<< 7.5.0-4), libgcc-8-dev (<< 8.3.0-27), libgcc-9-dev (<< 9.2.1-26)
+Replaces: libgcc1 (<< 1:10)
+Provides: libgcc1 (= 1:14.2.0-19)
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: http://gcc.gnu.org/
+Description: GCC support library
+ Shared version of the support library, a library of internal subroutines
+ that GCC uses to overcome shortcomings of particular machines, or
+ special needs for some languages.
+Important: yes
+
+Package: gcc-14-base
+Source: gcc-14
+Version: 14.2.0-19
+Architecture: arm64
+Maintainer: Debian GCC Maintainers <debian-gcc@lists.debian.org>
+Installed-Size: 112
+Breaks: gnat (<< 7)
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: http://gcc.gnu.org/
+Description: GCC, the GNU Compiler Collection (base package)
+ This package contains files common to all languages and libraries
+ contained in the GNU Compiler Collection (GCC).
+
+Package: libgomp1
+Source: gcc-14
+Version: 14.2.0-19
+Architecture: arm64
+Maintainer: Debian GCC Maintainers <debian-gcc@lists.debian.org>
+Installed-Size: 352
+Depends: gcc-14-base (= 14.2.0-19), libc6 (>= 2.38)
+Breaks: gcc-4.3 (<< 4.3.6-1), gcc-4.4 (<< 4.4.6-4), gcc-4.5 (<< 4.5.3-2)
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: http://gcc.gnu.org/
+Description: GCC OpenMP (GOMP) support library
+ GOMP is an implementation of OpenMP for the C, C++, and Fortran compilers
+ in the GNU Compiler Collection.
+
+Package: libstdc++6
+Source: gcc-14
+Version: 14.2.0-19
+Architecture: arm64
+Maintainer: Debian GCC Maintainers <debian-gcc@lists.debian.org>
+Installed-Size: 3022
+Depends: gcc-14-base (= 14.2.0-19), libc6 (>= 2.38), libgcc-s1 (>= 4.5)
+Conflicts: scim (<< 1.4.2-1)
+Breaks: gcc-4.3 (<< 4.3.6-1), gcc-4.4 (<< 4.4.6-4), gcc-4.5 (<< 4.5.3-2)
+Replaces: libstdc++6-14-dbg (<< 4.9.0-3)
+Section: libs
+Priority: optional
+Multi-Arch: same
+Homepage: http://gcc.gnu.org/
+Description: GNU Standard C++ Library v3
+ This package contains an additional runtime library for C++ programs
+ built with the GNU compiler.
+ .
+ libstdc++-v3 is a complete rewrite from the previous libstdc++-v2, which
+ was included up to g++-2.95. The first version of libstdc++-v3 appeared
+ in g++-3.0.
+
+Package: zlib1g
+Source: zlib (1:1.3.dfsg+really1.3.1-1)
+Version: 1:1.3.dfsg+really1.3.1-1+b1
+Architecture: arm64
+Maintainer: Mark Brown <broonie@debian.org>
+Installed-Size: 181
+Depends: libc6 (>= 2.17)
+Conflicts: zlib1 (<= 1:1.0.4-7)
+Breaks: libxml2 (<< 2.7.6.dfsg-2), texlive-binaries (<< 2023.20230311.66589-8)
+Provides: libz1
+Section: libs
+Priority: required
+Multi-Arch: same
+Homepage: http://zlib.net/
+Description: compression library - runtime
+ zlib is a library implementing the deflate compression method found
+ in gzip and PKZIP.  This package includes the shared library.
+
+nscd paths: []
+privileged files: []
+C++ headers: []
+fff1f0050a33ddf29c44634c7639ac16e2573a61e3daab4fcc4c007b432ccf19 usr/lib/aarch64-linux-gnu/libstdc++.so.6.0.33
+392e28361977fd0d2ce0e8627a71587810ed146a4955b317df7f2ba3d0cce3e8 usr/share/gdb/auto-load/usr/lib/aarch64-linux-gnu/libstdc++.so.6.0.33-gdb.py
+6fe00acadf8119ff245855e5dcc7f26c6c0ffaf4bfa2baa88feab58f23727d65 usr/lib/aarch64-linux-gnu/libz.so.1.3.1
+70fa4c4cf57eabeb96097cce47582d02379c4cd1de3db3e98ade4dd7089a1b13 usr/lib/aarch64-linux-gnu/libc.so.6
+Aligned new amd64
+
+/tmp/fe-original-amd64-libstdc++.so.6.0.33:	file format elf64-x86-64
+
+Disassembly of section .text:
+
+00000000000b3c20 <_ZnwmSt11align_val_t>:
+   b3c20: f3 0f 1e fa                  	endbr64
+   b3c24: 41 54                        	pushq	%r12
+   b3c26: 48 8d 46 ff                  	leaq	-0x1(%rsi), %rax
+   b3c2a: 48 89 f2                     	movq	%rsi, %rdx
+   b3c2d: 55                           	pushq	%rbp
+   b3c2e: 48 31 c2                     	xorq	%rax, %rdx
+   b3c31: 53                           	pushq	%rbx
+   b3c32: 48 83 ec 10                  	subq	$0x10, %rsp
+   b3c36: 48 39 d0                     	cmpq	%rdx, %rax
+   b3c39: 0f 83 3c da fe ff            	jae	0xa167b <_ZSt10unexpectedv+0x92>
+   b3c3f: 48 85 ff                     	testq	%rdi, %rdi
+   b3c42: b8 01 00 00 00               	movl	$0x1, %eax
+   b3c47: 4c 8d 64 24 08               	leaq	0x8(%rsp), %r12
+   b3c4c: 48 0f 45 c7                  	cmovneq	%rdi, %rax
+   b3c50: 48 89 c5                     	movq	%rax, %rbp
+   b3c53: b8 08 00 00 00               	movl	$0x8, %eax
+   b3c58: 48 39 c6                     	cmpq	%rax, %rsi
+   b3c5b: 48 0f 43 c6                  	cmovaeq	%rsi, %rax
+   b3c5f: 48 89 c3                     	movq	%rax, %rbx
+   b3c62: eb 14                        	jmp	0xb3c78 <_ZnwmSt11align_val_t+0x58>
+   b3c64: 0f 1f 40 00                  	nopl	(%rax)
+   b3c68: e8 43 a2 fe ff               	callq	0x9deb0 <_ZSt15get_new_handlerv@plt>
+   b3c6d: 48 85 c0                     	testq	%rax, %rax
+   b3c70: 0f 84 33 da fe ff            	je	0xa16a9 <_ZSt10unexpectedv+0xc0>
+   b3c76: ff d0                        	callq	*%rax
+   b3c78: 48 89 ea                     	movq	%rbp, %rdx
+   b3c7b: 48 89 de                     	movq	%rbx, %rsi
+   b3c7e: 4c 89 e7                     	movq	%r12, %rdi
+   b3c81: e8 ca 99 fe ff               	callq	0x9d650 <posix_memalign@plt>
+   b3c86: 85 c0                        	testl	%eax, %eax
+   b3c88: 75 de                        	jne	0xb3c68 <_ZnwmSt11align_val_t+0x48>
+   b3c8a: 48 8b 44 24 08               	movq	0x8(%rsp), %rax
+   b3c8f: 48 85 c0                     	testq	%rax, %rax
+   b3c92: 74 d4                        	je	0xb3c68 <_ZnwmSt11align_val_t+0x48>
+   b3c94: 48 83 c4 10                  	addq	$0x10, %rsp
+   b3c98: 5b                           	popq	%rbx
+   b3c99: 5d                           	popq	%rbp
+   b3c9a: 41 5c                        	popq	%r12
+   b3c9c: c3                           	retq
+   b3c9d: 0f 1f 00                     	nopl	(%rax)
+
+Aligned new arm64
+
+/tmp/fe-original-arm64-libstdc++.so.6.0.33:	file format elf64-littleaarch64
+
+Disassembly of section .text:
+
+00000000000aa1c0 <_ZnwmSt11align_val_t>:
+   aa1c0: d503233f     	paciasp
+   aa1c4: a9bc7bfd     	stp	x29, x30, [sp, #-0x40]!
+   aa1c8: d1000422     	sub	x2, x1, #0x1
+   aa1cc: ca020023     	eor	x3, x1, x2
+   aa1d0: 910003fd     	mov	x29, sp
+   aa1d4: a90153f3     	stp	x19, x20, [sp, #0x10]
+   aa1d8: f90013f5     	str	x21, [sp, #0x20]
+   aa1dc: eb02007f     	cmp	x3, x2
+   aa1e0: 540002e9     	b.ls	0xaa23c <_ZnwmSt11align_val_t+0x7c>
+   aa1e4: f100001f     	cmp	x0, #0x0
+   aa1e8: d2800102     	mov	x2, #0x8                // =8
+   aa1ec: 9a9f1414     	csinc	x20, x0, xzr, ne
+   aa1f0: eb02003f     	cmp	x1, x2
+   aa1f4: 9a822033     	csel	x19, x1, x2, hs
+   aa1f8: 9100e3f5     	add	x21, sp, #0x38
+   aa1fc: 14000004     	b	0xaa20c <_ZnwmSt11align_val_t+0x4c>
+   aa200: 97ffcc70     	bl	0x9d3c0 <_ZSt15get_new_handlerv@plt>
+   aa204: b40001c0     	cbz	x0, 0xaa23c <_ZnwmSt11align_val_t+0x7c>
+   aa208: d63f0000     	blr	x0
+   aa20c: aa1403e2     	mov	x2, x20
+   aa210: aa1303e1     	mov	x1, x19
+   aa214: aa1503e0     	mov	x0, x21
+   aa218: 97ffcbee     	bl	0x9d1d0 <posix_memalign@plt>
+   aa21c: 35ffff20     	cbnz	w0, 0xaa200 <_ZnwmSt11align_val_t+0x40>
+   aa220: f9401fe0     	ldr	x0, [sp, #0x38]
+   aa224: b4fffee0     	cbz	x0, 0xaa200 <_ZnwmSt11align_val_t+0x40>
+   aa228: f94013f5     	ldr	x21, [sp, #0x20]
+   aa22c: a94153f3     	ldp	x19, x20, [sp, #0x10]
+   aa230: a8c47bfd     	ldp	x29, x30, [sp], #0x40
+   aa234: d50323bf     	autiasp
+   aa238: d65f03c0     	ret
+   aa23c: d2800100     	mov	x0, #0x8                // =8
+   aa240: 97ffcf08     	bl	0x9de60 <__cxa_allocate_exception@plt>
+   aa244: b0000da3     	adrp	x3, 0x25f000
+   aa248: f9428463     	ldr	x3, [x3, #0x508]
+   aa24c: b0000da2     	adrp	x2, 0x25f000
+   aa250: f946f842     	ldr	x2, [x2, #0xdf0]
+   aa254: 91004063     	add	x3, x3, #0x10
+   aa258: 90000da1     	adrp	x1, 0x25e000 <_ZTVSt10moneypunctIwLb1EE+0x8>
+   aa25c: f947b821     	ldr	x1, [x1, #0xf70]
+   aa260: f9000003     	str	x3, [x0]
+   aa264: 97ffd0e3     	bl	0x9e5f0 <__cxa_throw@plt>
+   aa268: d503201f     	nop
+   aa26c: d503201f     	nop
+   aa270: d503201f     	nop
+   aa274: d503201f     	nop
+   aa278: d503201f     	nop
+   aa27c: d503201f     	nop

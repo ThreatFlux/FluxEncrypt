@@ -8,5 +8,13 @@ example_work="$(mktemp -d)"
 trap 'rm -rf "$example_work"' EXIT
 for example in basic_encryption file_encryption key_management environment_config; do
     mkdir "$example_work/$example"
-    (cd "$example_work/$example" && timeout 180 "$example_target/release/examples/$example")
+    # Python is already required by workflow validation; its timeout also works
+    # on macOS, where GNU coreutils timeout is not installed by default.
+    (cd "$example_work/$example" && python3 - "$example_target/release/examples/$example" <<'PYTHON'
+import subprocess
+import sys
+
+subprocess.run(sys.argv[1:], check=True, timeout=180)
+PYTHON
+    )
 done

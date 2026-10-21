@@ -16,9 +16,8 @@ readme = "../README.md"
 [dependencies]
 # Core cryptography
 ring = { workspace = true }
+aws-lc-rs = { workspace = true }
 rsa = { workspace = true }
-pkcs8 = { workspace = true }
-sha2 = { workspace = true }
 zeroize = { workspace = true }
 
 # Encoding and serialization
@@ -37,7 +36,6 @@ rayon = { workspace = true, optional = true }
 log = { workspace = true }
 
 # Utilities
-rand = { workspace = true }
 
 # Encoding for symmetric cipher
 hex = { workspace = true }
