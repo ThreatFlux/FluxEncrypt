@@ -1,7 +1,7 @@
 # FluxEncrypt has no system TLS/DNS dependency: ring and Rust RSA are linked
 # into a static PIE. Use Alpine's maintained musl archive, not Rust's bundled
 # CRT, and prove the selected libc from the linker map on every architecture.
-FROM rust:1.99.1-alpine3.24@sha256:557a94c82b485a14b569120e00867267108c734efe33f10cc31ca0cd5dd1eca9 AS builder
+FROM rust:1.99.1-alpine3.24@sha256:b1d5dd5a22a09404d3e798c0cf051b689077360374eb505fa5bb93c479693d87 AS builder
 RUN apk add --no-cache build-base binutils cmake perl tini-static
 WORKDIR /app
 # Copy build inputs explicitly: security reports and workflow edits do not
