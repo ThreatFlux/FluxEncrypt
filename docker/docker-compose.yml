@@ -5,14 +5,14 @@
 # writes by default. Run as your own user so the mounted directory is writable
 # and the generated files are yours:
 #   FLUXENCRYPT_UID=$(id -u) FLUXENCRYPT_GID=$(id -g) docker compose run --rm fluxencrypt keygen
-# Without them the images' own non-root users are used (65532 on distroless,
+# Without them the images' own non-root users are used (65532 on scratch,
 # 1000 on Alpine), which then need write access to ./data.
+# The default is the verified multi-platform GHCR release. Override the entire
+# FLUXENCRYPT_IMAGE reference to upgrade; prefer a verified tag@sha256 digest.
+# Alpine is local-build-only; no published GHCR Alpine tag is assumed.
 services:
   fluxencrypt:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-    image: threatflux/fluxencrypt:latest
+    image: "${FLUXENCRYPT_IMAGE:-ghcr.io/threatflux/fluxencrypt:0.7.11@sha256:07cf961ffbbab7b79f1b9e02a45511d255fb7ab06dc4838da75aee8aefb8b8e9}"
     container_name: fluxencrypt
     user: "${FLUXENCRYPT_UID:-65532}:${FLUXENCRYPT_GID:-65532}"
     volumes:
@@ -28,7 +28,8 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.alpine
-    image: threatflux/fluxencrypt:alpine
+    image: fluxencrypt-local:alpine
+    pull_policy: build
     container_name: fluxencrypt-alpine
     user: "${FLUXENCRYPT_UID:-1000}:${FLUXENCRYPT_GID:-1000}"
     volumes:

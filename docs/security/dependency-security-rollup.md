@@ -1,6 +1,39 @@
 # Dependency and code-scanning rollup
 
-Reviewed 2026-10-21. Source: all 190 open GitHub code-scanning alerts, retrieved with API pagination; zero open pull requests. Scope is each original scanned artifact, not automatically the current source tree. Rust stable was independently verified from the official distribution manifest as 1.99.1 (2026-10-15). Consumer MSRV remains 1.97.1.
+Historical review snapshot, 2026-10-21: all 190 then-open GitHub code-scanning alerts, retrieved with API pagination; zero then-open pull requests. The per-alert review and counts below preserve that snapshot, not the current alert inventory. Scope is each original scanned artifact, not automatically the current source tree. Rust stable was independently verified at that review from the official distribution manifest as 1.99.1 (2026-10-15). Consumer MSRV remains 1.97.1.
+
+## Released image and consumer status (2026-10-31)
+
+The triage coordinator independently verified the following release evidence on
+2026-10-31; this is separate from the historical local image IDs below:
+
+| Evidence | Verified scope |
+| --- | --- |
+| Registry references | `ghcr.io/threatflux/fluxencrypt:0.7.11` and `:latest` resolved to index `sha256:07cf961ffbbab7b79f1b9e02a45511d255fb7ab06dc4838da75aee8aefb8b8e9`. Mutable tags may subsequently move; the index digest identifies this release. |
+| Source and creation | Source SHA `f358d3fa934c0362f8c9ea76e45dbc4424635bcc`; image created 2026-10-31 07:41 UTC. |
+| Hosted delivery | [Docker tag run 41179400860](https://github.com/ThreatFlux/FluxEncrypt/actions/runs/41179400860) succeeded for build, linux/amd64 and linux/arm64 Security Scan, SBOM, signing and publishing jobs. |
+| Code-scanning results | Analyses on `refs/tags/v0.7.11` at 07:41:43–44 UTC reported zero results in categories `docker-image-linux-amd64` and `docker-image-linux-arm64`. This is scoped to those analyses and does not prove absence of vulnerabilities in static code. |
+| Legacy alert inventory | The 169 currently open Trivy alerts are from the older auto-release workflow category at `161ba96715b72bbb2d76555d11f680b596256de0`. New GHCR categories do not establish continuity or resolution of that older category. SARIF continuity is a separate workstream; no alerts are dismissed by this change. |
+
+The supported standard service in [docker-compose.yml](../../docker/docker-compose.yml)
+now selects the GHCR version and immutable index digest above. `FLUXENCRYPT_IMAGE`
+can override the complete reference for deliberate upgrades or separately tagged
+local builds. It is not coupled to a separate version variable that a digest pin
+would silently override. The service has no local build block, so building source
+does not retag an image with the verified release identity.
+
+The Alpine service is explicitly local-build-only, using `docker/Dockerfile.alpine`,
+the local tag `fluxencrypt-local:alpine`, and `pull_policy: build`. No existing
+GHCR Alpine tag or release scan coverage for that dynamic runtime is established.
+The standard scratch image and the Alpine variant are separate artifacts.
+
+Repository Compose references are reconciled; external consumers of the legacy
+Docker Hub repository `threatflux/fluxencrypt` are unknown. Release availability
+does not prove those consumers pulled the replacement. Consumer owners still need
+to inventory deployments, record their actual registry/platform/digest, migrate
+where applicable, and provide runtime digest receipts. Recovery of the historical
+Docker Hub artifact/SBOM and SARIF continuity remain separate evidence needs;
+neither is satisfied by a clean GHCR release scan.
 
 ## Implementation and validation boundaries
 
@@ -239,9 +272,11 @@ Scratch has no OS package database, so an empty image scan alone does not prove 
 
 Trivy 0.76.0, database updated **2026-10-21T01:19:53Z**. The runtime carries the CLI, static tini, account data, writable data directory and native provenance; original Debian shared libraries/packages are absent. AWS-LC 0.46.0 vendor/native provenance is included. These are local image IDs, not published deployment digests. Scratch scans do not inventory static code; see the independent native archive checks and Cargo advisory boundaries above.
 
-## Local quality gates
+## Historical local quality gates
 
-The previous full gate passed 234 release cases including 7 doctests. This change adds two private-RSA regression cases; all 18 focused RSA tests and the final native protocol tests passed. The complete gate must pass again on final committed HEAD, and its exact outcome is recorded in the PR. Container checks above cover both shipped Linux architectures. The repository-owned `make hooks-install` enables the pre-push hook, which runs the complete `make ci-local` on the committed head before this branch can be pushed (including all examples, 25 feature configurations, featureless tests, MSRV, audit/deny, workflow checks and benchmark smoke). The example runner now uses Python's existing subprocess timeout, preserving its 180-second bound on macOS without a GNU coreutils dependency. Exact completion or any failure is recorded in the pull request.
+The historical implementation recorded 234 passing release cases including 7 doctests, then added two private-RSA regression cases and recorded all 18 focused RSA tests and the final native protocol tests passing. Container checks above covered both shipped Linux architectures. At that time, the repository-owned pre-push hook bundled the complete `make ci-local` gate (including examples, 25 feature configurations, featureless tests, MSRV, audit/deny, workflow checks and benchmark smoke). The example runner used Python's subprocess timeout, preserving its 180-second bound on macOS without a GNU coreutils dependency. These historical results are not validation of the current documentation/Compose change.
+
+For this remediation, the standing local-check policy is repository-owned formatting and applicable lint only. GitHub runners own tests, builds, coverage, generated-contract checks and security/audit suites on the exact pushed commit. Older hooks bundling broader checks may be bypassed per command after explicit formatting/lint, as authorized by the user. No local tests, builds or audits are required or run for this change; the coordinator records current-head hosted results after publication.
 
 ## Original minimal-image evidence and proven FP rationale
 

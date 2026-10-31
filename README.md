@@ -232,12 +232,12 @@ fluxencrypt-cli stream-encrypt --key ./keys/fluxencrypt_key.pub --input large-fi
 
 The CLI is also published to the GitHub Container Registry as
 `ghcr.io/threatflux/fluxencrypt` for `linux/amd64` and `linux/arm64`. Each
-release is tagged with its version (for example `0.7.9`); `0.7`, `0` and
+release is tagged with its version (for example `0.7.11`); `0.7`, `0` and
 `latest` point at the newest release of their line. `main` and the short
 commit SHA follow the `main` branch. A tag is applied only after every
 platform passed its smoke test and its Trivy scan and the image was signed
 with keyless [cosign](https://github.com/sigstore/cosign). The image is
-distroless (no shell), runs as the non-root user 65532, and its entrypoint is
+scratch-based (no shell), runs as the non-root user 65532, and its entrypoint is
 the CLI:
 
 ```bash
@@ -252,6 +252,37 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -w /work \
 docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -w /work \
   ghcr.io/threatflux/fluxencrypt:0.7 encrypt --key ./keys/fluxencrypt_key.pub --input document.pdf --output document.pdf.enc
 ```
+
+The [Compose example](docker/docker-compose.yml) defaults to
+`ghcr.io/threatflux/fluxencrypt:0.7.11@sha256:07cf961ffbbab7b79f1b9e02a45511d255fb7ab06dc4838da75aee8aefb8b8e9`,
+the verified multi-platform release index for source
+`f358d3fa934c0362f8c9ea76e45dbc4424635bcc`. See the
+[dated release and scan evidence](docs/security/dependency-security-rollup.md#released-image-and-consumer-status-2026-10-31)
+for its scope and scanner limits. Run from `docker/`:
+
+```bash
+mkdir -p data keys
+FLUXENCRYPT_UID=$(id -u) FLUXENCRYPT_GID=$(id -g) docker compose run --rm fluxencrypt keygen
+```
+
+Set `FLUXENCRYPT_IMAGE` to a complete image reference when upgrading; prefer a
+verified release tag and index digest together. The default stays on the verified
+release until explicitly updated rather than following the mutable `latest` tag.
+For a local scratch build, build `docker/Dockerfile` with a separate local tag
+and select it with the same override:
+
+```bash
+docker build -f Dockerfile -t fluxencrypt-local:dev ..
+FLUXENCRYPT_IMAGE=fluxencrypt-local:dev docker compose run --rm fluxencrypt --version
+```
+
+The optional `fluxencrypt-alpine` service builds `docker/Dockerfile.alpine` locally
+as `fluxencrypt-local:alpine` (`pull_policy: build`). No published GHCR `:alpine`
+tag is established by the release evidence; the scratch release's digest and
+scan results do not cover this dynamic Alpine runtime. Use
+`docker compose run --rm fluxencrypt-alpine --version` to build and run it.
+These examples replace the repository's Docker Hub references; migration of
+external Docker Hub consumers remains unverified.
 
 ## Configuration
 
