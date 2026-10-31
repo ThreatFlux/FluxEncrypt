@@ -260,9 +260,8 @@ jobs:
         output: trivy-results.sarif
         severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
         vuln-type: os,library
-        # Findings are reported to code scanning and do not fail the job
-        # (exit-code 0), but a scanner failure does, so an image that was not
-        # scanned is never signed.
+        # Report every severity before the separate acceptance gate. Scanner
+        # errors still fail closed; findings are handled by the gate below.
         exit-code: "0"
 
     - name: Upload Trivy results
@@ -271,6 +270,49 @@ jobs:
       with:
         sarif_file: trivy-results.sarif
         category: ${{ steps.category.outputs.value }}
+
+    - name: Record scan provenance
+      env:
+        IMAGE: ${{ github.event_name == 'pull_request' && format('{0}:scan', needs.build.outputs.image_name) || format('{0}/{1}@{2}', env.REGISTRY, needs.build.outputs.image_name, needs.build.outputs.digest) }}
+        PLATFORM: ${{ matrix.platform }}
+      run: |
+        set -euo pipefail
+        trivy --version > trivy-version.txt
+        jq -n --arg image "${IMAGE}" --arg platform "${PLATFORM}" \
+          --arg sha "${GITHUB_SHA}" --arg ref "${GITHUB_REF}" \
+          --arg run_id "${GITHUB_RUN_ID}" --arg run_attempt "${GITHUB_RUN_ATTEMPT}" \
+          '{image: $image, platform: $platform, sha: $sha, ref: $ref,
+            run_id: $run_id, run_attempt: $run_attempt}' > trivy-provenance.json
+
+    - name: Reject HIGH and CRITICAL image vulnerabilities
+      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+      env:
+        TRIVY_PLATFORM: ${{ matrix.platform }}
+        TRIVY_IMAGE_SRC: ${{ github.event_name == 'pull_request' && 'docker' || 'remote' }}
+      with:
+        version: 'v0.76.0'
+        skip-setup-trivy: true
+        image-ref: ${{ github.event_name == 'pull_request' && format('{0}:scan', needs.build.outputs.image_name) || format('{0}/{1}@{2}', env.REGISTRY, needs.build.outputs.image_name, needs.build.outputs.digest) }}
+        format: json
+        output: trivy-gate.json
+        severity: HIGH,CRITICAL
+        vuln-type: os,library
+        scanners: vuln
+        ignore-unfixed: false
+        exit-code: "1"
+
+    - name: Retain image scan evidence
+      if: always()
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+      with:
+        name: trivy-${{ steps.category.outputs.value }}-${{ github.run_attempt }}
+        path: |
+          trivy-results.sarif
+          trivy-gate.json
+          trivy-provenance.json
+          trivy-version.txt
+        if-no-files-found: warn
+        retention-days: 30
 
   sign:
     name: Sign Container
@@ -330,7 +372,7 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Branch runs: the short commit SHA, plus the branch name (main) while
+      # Branch runs: full and short commit SHAs, plus the branch name (main) while
       # the commit is still the branch head. Release
       # tag vX.Y.Z: X.Y.Z, plus X.Y, X and latest only when X.Y.Z is the
       # newest stable release of that line. Comparing against the repository's
@@ -381,7 +423,7 @@ jobs:
             fi
           fi
         else
-          tags+=("${GITHUB_SHA::7}")
+          tags+=("${GITHUB_SHA}" "${GITHUB_SHA::7}")
           # Move the branch tag only while this commit is still the branch
           # head: the concurrency group serializes runs but does not promise
           # they start in commit order, and a newer commit's run moves it.
@@ -424,6 +466,30 @@ jobs:
           fi
           echo "- \`${tag}\`" >> "$GITHUB_STEP_SUMMARY"
         done
+
+    - name: Record accepted image
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      env:
+        IMAGE: ${{ env.REGISTRY }}/${{ needs.build.outputs.image_name }}
+        DIGEST: ${{ needs.build.outputs.digest }}
+      run: |
+        set -euo pipefail
+        jq -n --arg image "${IMAGE}" --arg digest "${DIGEST}" \
+          --arg sha "${GITHUB_SHA}" --arg ref "${GITHUB_REF}" \
+          --arg run_id "${GITHUB_RUN_ID}" --arg run_attempt "${GITHUB_RUN_ATTEMPT}" \
+          --argjson platforms "$(jq -cn --arg p "${PLATFORMS}" '$p | split(",")')" \
+          '{image: $image, digest: $digest, sha: $sha, ref: $ref,
+            run_id: $run_id, run_attempt: $run_attempt, platforms: $platforms}' \
+          > docker-image-acceptance.json
+
+    - name: Retain accepted image identity
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+      with:
+        name: docker-image-acceptance-${{ github.run_attempt }}
+        path: docker-image-acceptance.json
+        if-no-files-found: error
+        retention-days: 30
 
   # One SPDX SBOM per pushed platform: Syft otherwise catalogs only the
   # runner's platform of a multi-platform index.
