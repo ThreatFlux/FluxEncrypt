@@ -2,19 +2,17 @@ name: Auto Release
 
 concurrency:
   # Key on the head repository too, so a fork branch named "main" cannot cancel
-  # a release run for this repository's main. Dry runs use their own group so
-  # they never cancel a real release.
-  group: auto-release-${{ github.event.workflow_run.head_repository.full_name || github.repository }}-${{ github.event.workflow_run.head_branch || github.ref_name || 'main' }}${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '-dry-run' || '' }}
+  # a release run for this repository's main. Dry runs and Docker continuity
+  # scans use their own groups so they never cancel a real release.
+  group: auto-release-${{ github.event.workflow_run.head_repository.full_name || github.repository }}-${{ github.event.workflow_run.head_branch || github.ref_name || 'main' }}${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '-dry-run' || '' }}${{ github.event.workflow_run.name == 'Docker' && '-image-scan' || '' }}
   cancel-in-progress: true
 
-# workflow_run is what lets a release wait for CI and Security Audit on the
-# pushed commit. It is only acted on for successful push runs of this
-# repository's own main (see the job condition below); the reusable workflow
-# re-checks the required workflows for that commit, never runs the triggering
-# run's code, and passes no event data to a shell.
+# Releases wait for CI and Security Audit; the legacy image scan waits for
+# Docker acceptance. Both paths accept only successful main pushes from this
+# repository. Neither executes code or scripts from the triggering run.
 on:  # zizmor: ignore[dangerous-triggers]
   workflow_run:
-    workflows: [CI, Security Audit]
+    workflows: [CI, Security Audit, Docker]
     types: [completed]
     branches: [main]
   workflow_dispatch:
@@ -44,7 +42,8 @@ jobs:
     # this repository's main may start a release.
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
+      ((github.event.workflow_run.name == 'CI' || github.event.workflow_run.name == 'Security Audit') &&
+      github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_repository.full_name == github.repository)
     # The reusable workflow's release job declares these GITHUB_TOKEN scopes;
@@ -70,3 +69,135 @@ jobs:
       github-app-id: ${{ vars.TF_AUTOMATION_APP_ID }}
     secrets:
       github-app-private-key: ${{ secrets.TF_AUTOMATION_APP_PRIVATE_KEY }}
+
+  # Keep this workflow path and job ID, without a matrix: they form the old
+  # Trivy analysis_key. Use the default linux/amd64 image platform here;
+  # docker.yml continues to report and gate both platforms independently.
+  security_scan:
+    name: Refresh legacy image analysis
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.name == 'Docker' &&
+      github.event.workflow_run.path == '.github/workflows/docker.yml' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read  # Reads only the successful triggering run's receipt.
+      packages: read
+      security-events: write
+    steps:
+    - name: Download accepted image identity
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+      with:
+        name: docker-image-acceptance-${{ github.event.workflow_run.run_attempt }}
+        path: accepted-image
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        run-id: ${{ github.event.workflow_run.id }}
+
+    - name: Validate receipt and current main
+      id: accepted
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+        SOURCE_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+      run: |
+        set -euo pipefail
+        [[ "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]]
+        image="ghcr.io/${GITHUB_REPOSITORY,,}"
+        jq -e --arg image "${image}" --arg sha "${SOURCE_SHA}" \
+          --arg run_id "${SOURCE_RUN_ID}" --arg run_attempt "${SOURCE_RUN_ATTEMPT}" \
+          '.image == $image and .sha == $sha and .ref == "refs/heads/main" and
+            .run_id == $run_id and .run_attempt == $run_attempt and
+            (.digest | test("^sha256:[0-9a-f]{64}$")) and
+            (.platforms | sort == ["linux/amd64", "linux/arm64"])' \
+          accepted-image/docker-image-acceptance.json > /dev/null
+        head="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
+        if [[ "${head}" != "${SOURCE_SHA}" ]]; then
+          echo "::notice::Main moved to ${head}; leaving legacy analysis to that commit's Docker run"
+          echo "current=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        digest="$(jq -r .digest accepted-image/docker-image-acceptance.json)"
+        {
+          echo "image=${image}@${digest}"
+          echo "tag=${image}:${SOURCE_SHA}"
+          echo "current=true"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Set up Docker Buildx
+      if: steps.accepted.outputs.current == 'true'
+      uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
+
+    - name: Log in to registry
+      if: steps.accepted.outputs.current == 'true'
+      uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6  # v4.7.0
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Verify exact SHA tag against accepted digest
+      if: steps.accepted.outputs.current == 'true'
+      env:
+        IMAGE_TAG: ${{ steps.accepted.outputs.tag }}
+      run: |
+        set -euo pipefail
+        resolved="$(docker buildx imagetools inspect "${IMAGE_TAG}" --format '{{json .Manifest}}' | jq -r .digest)"
+        expected="$(jq -r .digest accepted-image/docker-image-acceptance.json)"
+        [[ "${resolved}" == "${expected}" ]]
+        # Scan the receipt's digest below, never the tag after this check.
+
+    - name: Scan accepted linux/amd64 image
+      if: steps.accepted.outputs.current == 'true'
+      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+      env:
+        TRIVY_PLATFORM: linux/amd64
+        TRIVY_IMAGE_SRC: remote
+      with:
+        version: 'v0.76.0'
+        scan-type: image
+        image-ref: ${{ steps.accepted.outputs.image }}
+        format: sarif
+        output: trivy-legacy.sarif
+        severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+        vuln-type: os,library
+        exit-code: "0"
+
+    - name: Recheck main before uploading legacy analysis
+      if: steps.accepted.outputs.current == 'true'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+      run: |
+        set -euo pipefail
+        head="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
+        [[ "${head}" == "${SOURCE_SHA}" ]]
+        trivy --version > trivy-version.txt
+
+    - name: Upload genuine scan under legacy identity
+      if: steps.accepted.outputs.current == 'true'
+      uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370  # v4.39.1
+      with:
+        sarif_file: trivy-legacy.sarif
+        category: .github/workflows/auto-release.yml:security_scan
+        ref: refs/heads/main
+        sha: ${{ github.event.workflow_run.head_sha }}
+        wait-for-processing: true
+
+    - name: Retain continuity scan evidence
+      if: always() && steps.accepted.outputs.current == 'true'
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+      with:
+        name: trivy-legacy-${{ github.run_attempt }}
+        path: |
+          accepted-image/docker-image-acceptance.json
+          trivy-legacy.sarif
+          trivy-version.txt
+        if-no-files-found: warn
+        retention-days: 30
