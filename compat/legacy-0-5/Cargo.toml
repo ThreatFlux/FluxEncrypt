@@ -1,0 +1,12 @@
+[workspace]
+
+[package]
+name = "fluxencrypt-legacy-secret-compat"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+fluxencrypt-current = { package = "fluxencrypt", path = "../../fluxencrypt" }
+fluxencrypt-legacy = { package = "fluxencrypt", version = "=0.5.0" }
+serde_json = "1.0.154"
