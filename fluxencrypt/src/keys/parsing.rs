@@ -6,7 +6,7 @@
 use crate::error::{FluxError, Result};
 use crate::keys::{PrivateKey, PublicKey};
 use rsa::pkcs8::{DecodePrivateKey, DecodePublicKey};
-use rsa::{RsaPrivateKey, RsaPublicKey};
+use rsa::{PrivateKey as RsaPrivateKey, PublicKey as RsaPublicKey};
 
 /// Key format enumeration
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Upgrade RustCrypto RSA to 0.10 and AWS-LC to 1.19. The `PrivateKey::new`,
+  `PublicKey::new` and `inner()` accessors now use RSA 0.10 key types; callers
+  that exchange underlying RSA keys must upgrade their direct `rsa` dependency.
+  Key encoding, minimal big-endian integer exports and RSA-OAEP SHA-512 wire
+  formats stay compatible. Private decryption continues to use AWS-LC.
+- Use the current operating-system RNG and PKCS#8 encoding APIs, and extend
+  the private-operation guard to cover RSA 0.10 method names.
+
 ### Fixed
 - `release.yml` writes the Windows archive's `.sha256` file with an LF line
   ending, like the Unix archives' files. Every

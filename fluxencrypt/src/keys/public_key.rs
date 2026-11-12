@@ -1,7 +1,7 @@
 //! RSA public key functionality.
 
 use crate::error::{FluxError, Result};
-use rsa::RsaPublicKey;
+use rsa::PublicKey as RsaPublicKey;
 use rsa::traits::PublicKeyParts;
 
 /// An RSA public key
@@ -15,7 +15,7 @@ impl std::fmt::Debug for PublicKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PublicKey")
             .field("key_size", &(self.inner.size() * 8))
-            .field("modulus", &format!("{} bits", self.inner.n().bits()))
+            .field("modulus", &format!("{} bits", self.inner.n().bit_width()))
             .field("public_exponent", &self.inner.e())
             .finish()
     }
@@ -39,12 +39,12 @@ impl PublicKey {
 
     /// Get the modulus as bytes
     pub fn modulus(&self) -> Vec<u8> {
-        self.inner.n().to_bytes_be()
+        self.inner.n().to_be_bytes_trimmed_vartime().to_vec()
     }
 
     /// Get the public exponent as bytes
     pub fn public_exponent(&self) -> Vec<u8> {
-        self.inner.e().to_bytes_be()
+        self.inner.e().to_be_bytes_trimmed_vartime().to_vec()
     }
 
     /// Get a reference to the inner RSA public key

@@ -2,7 +2,7 @@
 
 use crate::error::{FluxError, Result};
 use crate::keys::PublicKey;
-use rsa::RsaPrivateKey;
+use rsa::PrivateKey as RsaPrivateKey;
 use rsa::traits::{PrivateKeyParts, PublicKeyParts};
 use zeroize::ZeroizeOnDrop;
 
@@ -58,19 +58,19 @@ impl PrivateKey {
 
     /// Export the private key as encrypted PEM format (PKCS#8 format with password protection)
     pub fn to_encrypted_pem(&self, password: &str) -> Result<String> {
+        use getrandom::SysRng;
         use rsa::pkcs8::EncodePrivateKey;
-        use rsa::pkcs8::PrivateKeyInfo;
-        use rsa::rand_core::OsRng;
+        use rsa::pkcs8::PrivateKeyInfoRef;
 
         let private_key_der = self.inner.to_pkcs8_der().map_err(|e| {
             FluxError::crypto(format!("Failed to encode private key as PKCS#8 DER: {}", e))
         })?;
 
-        let private_key_info = PrivateKeyInfo::try_from(private_key_der.as_bytes())
+        let private_key_info = PrivateKeyInfoRef::try_from(private_key_der.as_bytes())
             .map_err(|e| FluxError::crypto(format!("Failed to parse PKCS#8 DER: {}", e)))?;
 
         let encrypted_private_key = private_key_info
-            .encrypt(&mut OsRng, password)
+            .encrypt_with_rng(&mut SysRng, password)
             .map_err(|e| FluxError::crypto(format!("Failed to encrypt private key: {}", e)))?;
 
         let pem_string = encrypted_private_key
@@ -101,22 +101,26 @@ impl PrivateKey {
 
     /// Get the modulus as bytes
     pub fn modulus(&self) -> Vec<u8> {
-        self.inner.n().to_bytes_be()
+        self.inner.n().to_be_bytes_trimmed_vartime().to_vec()
     }
 
     /// Get the private exponent as bytes
     pub fn private_exponent(&self) -> Vec<u8> {
-        self.inner.d().to_bytes_be()
+        self.inner.d().to_be_bytes_trimmed_vartime().to_vec()
     }
 
     /// Get the first prime factor as bytes
     pub fn prime1(&self) -> Vec<u8> {
-        self.inner.primes()[0].to_bytes_be()
+        self.inner.primes()[0]
+            .to_be_bytes_trimmed_vartime()
+            .to_vec()
     }
 
     /// Get the second prime factor as bytes
     pub fn prime2(&self) -> Vec<u8> {
-        self.inner.primes()[1].to_bytes_be()
+        self.inner.primes()[1]
+            .to_be_bytes_trimmed_vartime()
+            .to_vec()
     }
 
     /// Get the CRT coefficient as bytes
@@ -124,7 +128,7 @@ impl PrivateKey {
         let primes = self.inner.primes();
         if primes.len() >= 2 {
             let p = &primes[0];
-            p.to_bytes_be()
+            p.to_be_bytes_trimmed_vartime().to_vec()
         } else {
             vec![0u8; 32]
         }

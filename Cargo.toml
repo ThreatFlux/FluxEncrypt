@@ -22,11 +22,12 @@ rust-version = "1.97.1"
 # Core cryptography
 ring = "0.17.14"
 # Private RSA operations use AWS-LC; rsa remains for public/key-format compatibility.
-aws-lc-rs = "1.18.2"
+aws-lc-rs = "1.19.0"
 # Current stable RSA retains public/key-format compatibility. Its required
 # PKCS#8/digest/RNG traits are accessed through reexports, not redundant legacy
 # direct dependencies. Private RSA operations use the AWS-LC backend above.
-rsa = { version = "0.9.10", features = ["pkcs5", "sha2", "getrandom"] }
+rsa = { version = "0.10.0", features = ["pkcs5", "getrandom"] }
+getrandom = "0.4.3"
 zeroize = { version = "1.9.1", features = ["derive"] }
 
 # Encoding and serialization
@@ -51,7 +52,7 @@ dialoguer = "0.12.0"
 
 # Logging
 env_logger = "0.11.11"
-log = "0.4.34"
+log = "0.4.35"
 
 # Testing
 criterion = { version = "0.8.2", features = ["html_reports"] }

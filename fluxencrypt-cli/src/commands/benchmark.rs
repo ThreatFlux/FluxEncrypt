@@ -79,17 +79,17 @@ impl SecureTempFiles {
         // Try to use XDG runtime directory first (Linux/Unix), fallback to system temp
         let base_dir = std::env::var("XDG_RUNTIME_DIR")
             .map(std::path::PathBuf::from)
-            .or_else(|_: std::env::VarError| {
+            .unwrap_or_else(|_: std::env::VarError| {
                 // Fallback to creating our own secure directory
                 #[cfg(unix)]
                 {
-                    Ok::<std::path::PathBuf, std::env::VarError>(std::path::PathBuf::from("/tmp"))
+                    std::path::PathBuf::from("/tmp")
                 }
                 #[cfg(not(unix))]
                 {
-                    Ok::<std::path::PathBuf, std::env::VarError>(std::env::temp_dir())
+                    std::env::temp_dir()
                 }
-            })?;
+            });
 
         let temp_dir = base_dir.join(unique_id);
 

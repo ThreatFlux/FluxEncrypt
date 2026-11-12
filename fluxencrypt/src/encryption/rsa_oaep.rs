@@ -6,7 +6,6 @@
 use crate::error::{FluxError, Result};
 use crate::keys::{PrivateKey, PublicKey};
 use aws_lc_rs::rsa::{OAEP_SHA512_MGF1SHA512, OaepPrivateDecryptingKey, PrivateDecryptingKey};
-use rsa::Oaep;
 use rsa::pkcs8::EncodePrivateKey;
 use rsa::sha2::Sha512;
 use zeroize::Zeroizing;
@@ -40,16 +39,10 @@ impl RsaOaepCipher {
             )));
         }
 
-        // Create OAEP padding with SHA-512
-        let padding = Oaep::new::<Sha512>();
-
-        // Get a random number generator
-        let mut rng = rsa::rand_core::OsRng;
-
         // Encrypt using RSA-OAEP
         public_key
             .inner()
-            .encrypt(&mut rng, padding, plaintext)
+            .oaep_encrypt::<Sha512>(plaintext)
             .map_err(|e| FluxError::crypto(format!("RSA encryption failed: {}", e)))
     }
 

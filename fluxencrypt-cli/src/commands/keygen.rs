@@ -10,7 +10,9 @@ use fluxencrypt::keys::{
     KeyPair,
     storage::{KeyStorage, StorageOptions},
 };
+#[cfg(unix)]
 use std::fs::OpenOptions;
+#[cfg(unix)]
 use std::io::Write;
 use std::path::{Path, PathBuf};
 

@@ -2,7 +2,7 @@
 
 use crate::error::{FluxError, Result};
 use crate::keys::{PrivateKey, PublicKey};
-use rsa::RsaPrivateKey;
+use rsa::PrivateKey as RsaPrivateKey;
 
 /// An RSA key pair containing both public and private keys
 #[derive(Debug)]
@@ -22,7 +22,7 @@ impl KeyPair {
     pub fn generate(key_size: usize) -> Result<Self> {
         validate_key_size(key_size)?;
 
-        let mut rng = rsa::rand_core::OsRng;
+        let mut rng = getrandom::SysRng;
         let private_key = RsaPrivateKey::new(&mut rng, key_size)
             .map_err(|e| FluxError::crypto(format!("Failed to generate RSA private key: {}", e)))?;
 

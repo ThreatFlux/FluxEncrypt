@@ -124,11 +124,11 @@ fn test_4096_bit_rsa_default() {
     // RSA-4096 has a 512-byte (4096-bit) modulus
 
     // Parse the key to verify size
-    use rsa::RsaPublicKey;
+    use rsa::PublicKey as RsaPublicKey;
     use rsa::traits::PublicKeyParts;
 
     let public_key: RsaPublicKey = keypair.public_key().inner().clone();
-    let modulus_bits = public_key.n().bits();
+    let modulus_bits = public_key.n().bit_width();
 
     assert_eq!(modulus_bits, 4096, "Expected 4096-bit RSA key");
 }
