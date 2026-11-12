@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+
 - Upgrade RustCrypto RSA to 0.10 and AWS-LC to 1.19. The `PrivateKey::new`,
   `PublicKey::new` and `inner()` accessors now use RSA 0.10 key types; callers
   that exchange underlying RSA keys must upgrade their direct `rsa` dependency.
