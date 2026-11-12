@@ -17,6 +17,9 @@ class RsaScopeTests(unittest.TestCase):
         self.assertTrue(scope.violations('key.inner().oaep_decrypt_with_rng(&mut rng, ciphertext)'))
         self.assertTrue(scope.violations('key.inner().oaep_decrypt::<Sha512>(ciphertext)'))
         self.assertTrue(scope.violations('key.inner().oaep_decrypt_with_rng::<Sha512, _>(&mut rng, ciphertext)'))
+        self.assertTrue(scope.violations('key.inner().pss_sign_prehash(digest)'))
+        self.assertTrue(scope.violations('key.inner().pss_sign_prehash_with_rng(&mut rng, digest)'))
+        self.assertTrue(scope.violations('key.inner().oaep_decrypt::<\n    Sha512\n>(ciphertext)'))
 
     def test_rejects_private_operation_imports(self):
         for source in ('use rsa::hazmat;', 'use rsa::Pkcs1v15Sign;', 'use rsa::pss::{SigningKey};'):

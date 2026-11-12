@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 BLOCKED = (
-    re.compile(r'\.inner\s*\(\s*\)\s*\.\s*(?:(?:oaep_|pkcs1v15_)?decrypt(?:_blinded|_with_rng)?|(?:pss_|pkcs1v15_)?sign(?:_blinded|_with_rng)?)\s*(?:::\s*<[^;\n]*>)?\s*\('),
+    re.compile(r'\.inner\s*\(\s*\)\s*\.\s*(?:(?:oaep_|pkcs1v15_)?decrypt(?:_blinded|_with_rng)?|(?:pss_|pkcs1v15_)?sign(?:_prehash)?(?:_blinded|_with_rng)?)\s*(?:::\s*<[^;{}]*>)?\s*\('),
     re.compile(r'\brsa\s*::\s*(?:hazmat|Pss|Pkcs1v15Sign)\b'),
     re.compile(r'\brsa\s*::\s*(?:pkcs1v15|pss)\s*::[^;]*\b(?:SigningKey|BlindedSigningKey)\b'),
 )
