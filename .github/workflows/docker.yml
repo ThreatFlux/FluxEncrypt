@@ -24,6 +24,7 @@ on:
     - "fluxencrypt-async/**"
     - "fluxencrypt-cli/**"
     - "scripts/docker-smoke.sh"
+    - "scripts/container-version.py"
   schedule:
   - cron: "0 4 * * 1"
   workflow_dispatch:
@@ -66,6 +67,9 @@ jobs:
       with:
         persist-credentials: false
 
+    - name: Verify container package version
+      run: python3 scripts/container-version.py
+
     - name: Lowercase image name
       id: lowercase
       run: echo "image_name=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
@@ -89,9 +93,14 @@ jobs:
     - name: Set up QEMU
       if: github.event_name != 'pull_request'
       uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1  # v4.4.0
+      with:
+        image: tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
+      with:
+        version: v0.39.0
+        driver-opts: image=moby/buildkit:v0.35.0@sha256:aa632b921ef07411d2cb77292cd34213d4f7b384001d6fceef1e1f25bf9752bb
 
     - name: Log in to GitHub Container Registry
       if: github.event_name != 'pull_request'
@@ -165,8 +174,10 @@ jobs:
         # --help on one platform of IMAGE and checks that it runs as the
         # distroless nonroot user.
         smoke_test() {
-          local platform="$1" image="$2" container user
+          local platform="$1" image="$2" container user reported
           echo "::group::Smoke test ${platform}"
+          reported="$(docker run --rm --platform "${platform}" "${image}" --version)"
+          python3 scripts/container-version.py --reported "${reported}"
           SMOKE_PLATFORM="${platform}" ./scripts/docker-smoke.sh "${image}"
           docker run --rm --platform "${platform}" "${image}" --help > /dev/null
           # Read USER from a container of this platform: inspecting a
@@ -254,7 +265,7 @@ jobs:
         TRIVY_PLATFORM: ${{ matrix.platform }}
         TRIVY_IMAGE_SRC: ${{ github.event_name == 'pull_request' && 'docker' || 'remote' }}
       with:
-        version: 'v0.76.0'
+        version: 'v0.76.2'
         image-ref: ${{ github.event_name == 'pull_request' && format('{0}:scan', needs.build.outputs.image_name) || format('{0}/{1}@{2}', env.REGISTRY, needs.build.outputs.image_name, needs.build.outputs.digest) }}
         format: sarif
         output: trivy-results.sarif
@@ -290,7 +301,7 @@ jobs:
         TRIVY_PLATFORM: ${{ matrix.platform }}
         TRIVY_IMAGE_SRC: ${{ github.event_name == 'pull_request' && 'docker' || 'remote' }}
       with:
-        version: 'v0.76.0'
+        version: 'v0.76.2'
         skip-setup-trivy: true
         image-ref: ${{ github.event_name == 'pull_request' && format('{0}:scan', needs.build.outputs.image_name) || format('{0}/{1}@{2}', env.REGISTRY, needs.build.outputs.image_name, needs.build.outputs.digest) }}
         format: json
@@ -347,7 +358,7 @@ jobs:
     name: Publish Image Tags
     # Runs only after the build (with its smoke tests), the scan and the
     # signature succeeded, so only main and release tags are ever tagged.
-    needs: [build, scan, sign]
+    needs: [build, scan, sign, sbom]
     runs-on: ubuntu-latest
     # Every release tag run shares one publish lock (branch runs are already
     # serialized per branch by the workflow group), so the newest-release
@@ -364,6 +375,9 @@ jobs:
     steps:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
+      with:
+        version: v0.39.0
+        driver-opts: image=moby/buildkit:v0.35.0@sha256:aa632b921ef07411d2cb77292cd34213d4f7b384001d6fceef1e1f25bf9752bb
 
     - name: Log in to registry
       uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550  # v4.8.0
@@ -459,7 +473,7 @@ jobs:
           echo
         } >> "$GITHUB_STEP_SUMMARY"
         for tag in "${tags[@]}"; do
-          resolved="$(docker buildx imagetools inspect "${IMAGE}:${tag}" --format '{{json .Manifest}}' | jq -r .digest)"
+          resolved="$(docker buildx imagetools inspect "${IMAGE}:${tag}" --format '{{.Manifest.Digest}}')"
           if [[ "${resolved}" != "${DIGEST}" ]]; then
             echo "::error::${IMAGE}:${tag} resolves to ${resolved}, not the signed digest ${DIGEST}"
             exit 1
@@ -518,7 +532,7 @@ jobs:
       id: syft
       uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c  # v0.24.3
       with:
-        syft-version: v1.55.0
+        syft-version: v1.57.1
 
     - name: Generate SBOM
       id: sbom
