@@ -1,6 +1,6 @@
 ---
 engines:
-  metric:
+  lizard:
     # Generated dependency metadata has no hand-written code complexity.
     # Keep dependency/security engines enabled for this historical fixture.
     exclude_paths:
