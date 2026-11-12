@@ -249,6 +249,9 @@ impl KeyStorage {
 
     /// Create a file with specific permissions
     fn create_file_with_permissions(&self, path: &Path, mode: Option<u32>) -> Result<File> {
+        #[cfg(not(unix))]
+        let _ = mode;
+
         let file = OpenOptions::new()
             .write(true)
             .create(true)

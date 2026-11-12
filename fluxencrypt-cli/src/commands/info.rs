@@ -91,6 +91,9 @@ fn display_timestamps(metadata: &fs::Metadata) {
 }
 
 fn display_permissions(metadata: &fs::Metadata) {
+    #[cfg(not(unix))]
+    let _ = metadata;
+
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;

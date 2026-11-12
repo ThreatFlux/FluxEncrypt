@@ -13,6 +13,10 @@ class RsaScopeTests(unittest.TestCase):
     def test_rejects_previous_private_decryption(self):
         self.assertTrue(scope.violations('private_key\n .inner()\n .decrypt(padding, ciphertext)'))
         self.assertTrue(scope.violations('key.inner( ).sign_with_rng(&mut rng, padding, digest)'))
+        self.assertTrue(scope.violations('key.inner().oaep_decrypt(ciphertext)'))
+        self.assertTrue(scope.violations('key.inner().oaep_decrypt_with_rng(&mut rng, ciphertext)'))
+        self.assertTrue(scope.violations('key.inner().oaep_decrypt::<Sha512>(ciphertext)'))
+        self.assertTrue(scope.violations('key.inner().oaep_decrypt_with_rng::<Sha512, _>(&mut rng, ciphertext)'))
 
     def test_rejects_private_operation_imports(self):
         for source in ('use rsa::hazmat;', 'use rsa::Pkcs1v15Sign;', 'use rsa::pss::{SigningKey};'):
