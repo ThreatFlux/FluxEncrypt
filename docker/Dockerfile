@@ -1,14 +1,11 @@
 # FluxEncrypt has no system TLS/DNS dependency: ring and Rust RSA are linked
 # into a static PIE. Use Alpine's maintained musl archive, not Rust's bundled
 # CRT, and prove the selected libc from the linker map on every architecture.
-FROM rust:1.99.1-alpine3.24@sha256:44819b27be4c97b0e4d7203bd2e02c4820f97700211b6a37fb4c246a2de59383 AS builder
+FROM rust:1.100.0-alpine3.24@sha256:de1e0058543a81ed7b046629167db587c67a94bdf37cce14eb27f0ec83baaffb AS builder
 
-# Official 1.100.0 Alpine images are not published yet. This verified image is
-# bootstrap-only; install and prove the active stable compiler before building.
 ENV RUST_VERSION=1.100.0
 RUN rustup toolchain install 1.100.0 --profile minimal --no-self-update --component clippy --component rustfmt && \
     rustup default 1.100.0 && \
-    rustup toolchain uninstall 1.99.1 && \
     rustc --version | grep -E '^rustc 1\.100\.0 ' && \
     cargo --version
 RUN apk add --no-cache build-base binutils cmake perl tini-static
