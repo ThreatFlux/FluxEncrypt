@@ -6,3 +6,8 @@ paths:
     # (rhysd/actionlint#746); docker.yml's release publish lock uses
     # `queue: max` so no waiting release publish is dropped.
     - 'unexpected key "queue" for "concurrency" section'
+  .github/workflows/auto-release.yml:
+    ignore:
+    # actionlint 1.7.12 predates GitHub's documented publication queue key.
+    # Keep every other workflow diagnostic enabled.
+    - 'unexpected key "queue" for "concurrency" section'

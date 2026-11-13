@@ -51,6 +51,7 @@ workflow-check:
 	python3 scripts/test_set_version.py
 	python3 scripts/test_geiger_report.py
 	python3 scripts/test_rsa_scope.py
+	python3 scripts/test_container_version.py
 	$(ACTIONLINT)
 	$(YAMLLINT) -c .yamllint.yml .github/workflows
 hooks-install:
