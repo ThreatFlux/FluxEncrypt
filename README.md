@@ -254,11 +254,12 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" -w /work \
 ```
 
 The [Compose example](docker/docker-compose.yml) defaults to
-`ghcr.io/threatflux/fluxencrypt:0.7.11@sha256:07cf961ffbbab7b79f1b9e02a45511d255fb7ab06dc4838da75aee8aefb8b8e9`,
+`ghcr.io/threatflux/fluxencrypt:0.8.1@sha256:2f76bdca0c31b83217d9dd35ac9a66010b8cf0bb2713f8f4090b6cba2468c9ec`,
 the verified multi-platform release index for source
-`f358d3fa934c0362f8c9ea76e45dbc4424635bcc`. See the
-[dated release and scan evidence](docs/security/dependency-security-rollup.md#released-image-and-consumer-status-2026-10-31)
-for its scope and scanner limits. Run from `docker/`:
+`c4a0e7744649e14a929eef67bce336e0cb2cd072`. The [0.8.1 image delivery](https://github.com/ThreatFlux/FluxEncrypt/actions/runs/43357182449)
+records both-platform smoke tests, scans, SBOMs, signing and publication.
+The [dated release and scan evidence](docs/security/dependency-security-rollup.md#released-image-and-consumer-status-2026-10-31)
+retains the 2026-10-31 checkpoint and its scanner limits. Run from `docker/`:
 
 ```bash
 mkdir -p data keys
