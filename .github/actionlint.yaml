@@ -11,3 +11,6 @@ paths:
     # actionlint 1.7.12 predates GitHub's documented publication queue key.
     # Keep every other workflow diagnostic enabled.
     - 'unexpected key "queue" for "concurrency" section'
+  .github/workflows/release.yml:
+    ignore:
+      - 'unexpected key "queue" for "concurrency" section'
