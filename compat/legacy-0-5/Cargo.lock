@@ -433,7 +433,7 @@ dependencies = [
 
 [[package]]
 name = "fluxencrypt"
-version = "0.7.12"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "aws-lc-rs",
@@ -455,7 +455,7 @@ name = "fluxencrypt-legacy-secret-compat"
 version = "0.0.0"
 dependencies = [
  "fluxencrypt 0.5.0",
- "fluxencrypt 0.7.12",
+ "fluxencrypt 0.8.0",
  "serde_json",
 ]
 
