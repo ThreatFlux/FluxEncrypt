@@ -26,6 +26,12 @@ on:
         type: boolean
         default: false
 
+concurrency:
+  # Queue every real publication; dry-run rehearsals use separate groups.
+  group: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && format('release-dry-run-{0}', github.ref) || 'release-publish' }}
+  cancel-in-progress: false
+  queue: max
+
 env:
   CARGO_TERM_COLOR: always
   CARGO_BUILD_JOBS: 4
