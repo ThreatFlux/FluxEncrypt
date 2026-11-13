@@ -15,8 +15,9 @@ The triage coordinator independently verified the following release evidence on
 | Code-scanning results | Analyses on `refs/tags/v0.7.11` at 07:41:43–44 UTC reported zero results in categories `docker-image-linux-amd64` and `docker-image-linux-arm64`. This is scoped to those analyses and does not prove absence of vulnerabilities in static code. |
 | Legacy alert inventory | The 169 currently open Trivy alerts are from the older auto-release workflow category at `161ba96715b72bbb2d76555d11f680b596256de0`. New GHCR categories do not establish continuity or resolution of that older category. SARIF continuity is a separate workstream; no alerts are dismissed by this change. |
 
-The supported standard service in [docker-compose.yml](../../docker/docker-compose.yml)
-now selects the GHCR version and immutable index digest above. `FLUXENCRYPT_IMAGE`
+At the 2026-10-31 checkpoint, the supported standard service in
+[docker-compose.yml](../../docker/docker-compose.yml) selected the GHCR version
+and immutable index digest above. `FLUXENCRYPT_IMAGE`
 can override the complete reference for deliberate upgrades or separately tagged
 local builds. It is not coupled to a separate version variable that a digest pin
 would silently override. The service has no local build block, so building source
