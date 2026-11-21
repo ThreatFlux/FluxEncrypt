@@ -1,28 +1,18 @@
 version: 2
-# No `labels` keys: Dependabot then applies its default labels (dependencies
-# plus the ecosystem, such as rust or github_actions) and creates them in the
-# repository when they are missing. Custom labels must already exist.
+multi-ecosystem-groups:
+  nightly-dependencies:
+    schedule:
+      interval: cron
+      cronjob: "0 6 * * *"
+      timezone: UTC
+    commit-message:
+      prefix: "chore(deps)"
+
 updates:
 - package-ecosystem: cargo
   directory: /
-  schedule:
-    interval: cron
-    cronjob: "0 6 * * *"
-    timezone: UTC
-  open-pull-requests-limit: 10
-  groups:
-    rust-minor-patch:
-      patterns:
-      - "*"
-      update-types:
-      - minor
-      - patch
-  commit-message:
-    prefix: "chore(deps)"
-  # rsa 0.9.x, the latest stable RSA line, builds its public API on pkcs8 0.10,
-  # digest/sha2 0.10 and rand_core 0.6 (rand 0.8), so their next majors cannot
-  # build until the rsa 0.10 migration (see docs/MODERNIZATION.md). Minor and
-  # patch updates still arrive.
+  patterns: ["*"]
+  multi-ecosystem-group: nightly-dependencies
   ignore:
   - dependency-name: pkcs8
     update-types: ["version-update:semver-major"]
@@ -33,27 +23,13 @@ updates:
 
 - package-ecosystem: github-actions
   directory: /
-  schedule:
-    interval: cron
-    cronjob: "0 6 * * *"
-    timezone: UTC
-  open-pull-requests-limit: 5
-  groups:
-    github-actions:
-      patterns:
-      - "*"
-  commit-message:
-    prefix: "chore(ci)"
+  patterns: ["*"]
+  multi-ecosystem-group: nightly-dependencies
 
-  # Dockerfile (root) plus docker/Dockerfile and docker/Dockerfile.alpine.
+# Dockerfile (root) plus docker/Dockerfile and docker/Dockerfile.alpine.
 - package-ecosystem: docker
   directories:
   - /
   - /docker
-  schedule:
-    interval: cron
-    cronjob: "0 6 * * *"
-    timezone: UTC
-  open-pull-requests-limit: 3
-  commit-message:
-    prefix: "chore(docker)"
+  patterns: ["*"]
+  multi-ecosystem-group: nightly-dependencies
