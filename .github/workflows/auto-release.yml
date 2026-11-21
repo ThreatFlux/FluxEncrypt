@@ -52,12 +52,13 @@ jobs:
     permissions:
       actions: write  # Dispatches release workflows on the GITHUB_TOKEN path.
       contents: write  # Release commit, tag and GitHub Release.
-      pull-requests: write  # Optional release pull request (create-pr).
+      pull-requests: write  # Opens or refreshes the reviewed release pull request.
     uses: ThreatFlux/github_actions/.github/workflows/reusable-auto-release.yml@f4d48290988681cfbf3e03f47e312a79b322ccc8  # v0.7.12
     with:
       bump: ${{ github.event.inputs.version_bump || 'auto' }}
       # Only a manual dispatch can request a dry run; workflow_run always releases.
       dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+      create-pr: true
       required-workflows: ci.yml,security.yml
       # The threatflux-automation App pushes the release tag, and an App push
       # starts release.yml and docker.yml through their `push: tags`
