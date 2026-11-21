@@ -28,7 +28,7 @@ aws-lc-rs = "1.19.0"
 # direct dependencies. Private RSA operations use the AWS-LC backend above.
 rsa = { version = "0.10.0", features = ["pkcs5", "getrandom"] }
 getrandom = "0.4.3"
-zeroize = { version = "1.9.1", features = ["derive"] }
+zeroize = { version = "1.9.2", features = ["derive"] }
 
 # Encoding and serialization
 base64 = "0.23.1"
@@ -45,13 +45,13 @@ tokio = { version = "1.54.1", features = ["full"] }
 futures = "0.3.34"
 
 # CLI utilities
-clap = { version = "4.6.7", features = ["derive", "cargo"] }
+clap = { version = "4.6.9", features = ["derive", "cargo"] }
 indicatif = "0.18.6"
 colored = "3.1.1"
 dialoguer = "0.12.0"
 
 # Logging
-env_logger = "0.11.11"
+env_logger = "0.11.12"
 log = "0.4.35"
 
 # Testing
