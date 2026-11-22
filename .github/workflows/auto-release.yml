@@ -38,7 +38,8 @@ permissions:
   contents: read
 
 jobs:
-  release:
+  release_source:
+    name: Verify release proposal source
     # Pull-request and fork runs also complete CI; only a successful push to
     # this repository's main may start a release.
     if: >-
@@ -47,6 +48,56 @@ jobs:
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      eligible: ${{ steps.source.outputs.eligible }}
+    steps:
+    - name: Bind an untagged manifest version to its reviewed merge
+      id: source
+      if: github.event_name != 'workflow_dispatch' || !inputs.dry_run
+      env:
+        GH_TOKEN: ${{ github.token }}
+        SOURCE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+      run: |
+        set -euo pipefail
+        [[ "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]]
+        current="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
+        if [[ "${SOURCE_SHA}" != "${current}" ]]; then
+          if [[ "${GITHUB_EVENT_NAME}" == workflow_run ]]; then
+            echo "::notice::Main moved to ${current}; skipping ${SOURCE_SHA}"
+            exit 0
+          fi
+          echo "::error::Release dispatch must target current main (${current})"
+          exit 1
+        fi
+
+        version="$(gh api -H 'Accept: application/vnd.github.raw+json' \
+          "repos/${GITHUB_REPOSITORY}/contents/Cargo.toml?ref=${SOURCE_SHA}" | \
+          python3 -c 'import sys, tomllib; print(tomllib.loads(sys.stdin.read())["workspace"]["package"]["version"])')"
+        [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+        tag="refs/tags/v${version}"
+        tagged="$(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v${version}" | \
+          jq -r --arg tag "${tag}" 'any(.[]; .ref == $tag)')"
+        if [[ "${tagged}" != true ]]; then
+          gh api --method GET --paginate "repos/${GITHUB_REPOSITORY}/pulls" \
+            -f state=closed -f base=main -f head="${GITHUB_REPOSITORY_OWNER}:automation/release" -F per_page=100 | \
+            jq -es --arg sha "${SOURCE_SHA}" --arg repo "${GITHUB_REPOSITORY}" '
+              any(.[][]; .merged_at != null and .merge_commit_sha == $sha and
+                .base.ref == "main" and .head.ref == "automation/release" and
+                .base.repo.full_name == $repo and .head.repo.full_name == $repo and
+                (.user.login == "threatflux-automation[bot]" or .user.login == "github-actions[bot]"))' >/dev/null || {
+            echo "::error::Untagged v${version} may only be released from its automation/release proposal merge commit"
+            exit 1
+          }
+        fi
+        echo 'eligible=true' >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: release_source
+    if: needs.release_source.outputs.eligible == 'true' || (github.event_name == 'workflow_dispatch' && inputs.dry_run)
     # The reusable workflow's release job declares these GITHUB_TOKEN scopes;
     # the App token does the writes when the App is configured.
     permissions:
