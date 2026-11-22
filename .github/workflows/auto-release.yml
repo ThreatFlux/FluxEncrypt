@@ -50,8 +50,8 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      pull-requests: read
+      contents: read  # Reads the candidate manifest, main ref, and version tag.
+      pull-requests: read  # Verifies the merged version proposal.
     outputs:
       eligible: ${{ steps.source.outputs.eligible }}
     steps:
@@ -82,14 +82,21 @@ jobs:
         tagged="$(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v${version}" | \
           jq -r --arg tag "${tag}" 'any(.[]; .ref == $tag)')"
         if [[ "${tagged}" != true ]]; then
-          gh api --method GET --paginate "repos/${GITHUB_REPOSITORY}/pulls" \
-            -f state=closed -f base=main -f head="${GITHUB_REPOSITORY_OWNER}:automation/release" -F per_page=100 | \
-            jq -es --arg sha "${SOURCE_SHA}" --arg repo "${GITHUB_REPOSITORY}" '
+          recovery_branch="release/recover-v${version}"
+          proposals="$(
+            for branch in automation/release "${recovery_branch}"; do
+              gh api --method GET --paginate "repos/${GITHUB_REPOSITORY}/pulls" \
+                -f state=closed -f base=main -f head="${GITHUB_REPOSITORY_OWNER}:${branch}" -F per_page=100 || exit 1
+            done
+          )"
+          jq -es --arg sha "${SOURCE_SHA}" --arg repo "${GITHUB_REPOSITORY}" --arg recovery "${recovery_branch}" '
               any(.[][]; .merged_at != null and .merge_commit_sha == $sha and
-                .base.ref == "main" and .head.ref == "automation/release" and
+                .base.ref == "main" and
                 .base.repo.full_name == $repo and .head.repo.full_name == $repo and
-                (.user.login == "threatflux-automation[bot]" or .user.login == "github-actions[bot]"))' >/dev/null || {
-            echo "::error::Untagged v${version} may only be released from its automation/release proposal merge commit"
+                ((.head.ref == "automation/release" and
+                  (.user.login == "threatflux-automation[bot]" or .user.login == "github-actions[bot]")) or
+                 (.head.ref == $recovery and .user.type == "User")))' <<< "${proposals}" >/dev/null || {
+            echo "::error::Untagged v${version} requires a reviewed release proposal for this exact main commit. See docs/MODERNIZATION.md for recovery."
             exit 1
           }
         fi
